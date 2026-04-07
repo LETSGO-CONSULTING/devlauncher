@@ -4,32 +4,34 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
 
-// ─── Config persistence ────────────────────────────────────────────────────
-const CONFIG_DIR = path.join(os.homedir(), '.devlauncher')
-const CONFIG_FILE = path.join(CONFIG_DIR, 'groups.json')
+// ─── Types ─────────────────────────────────────────────────────────────────
+type ProjectType = 'npm' | 'maven' | 'gradle'
 
-interface StoredProject {
+interface ScannedProject {
   id: string
   name: string
   path: string
-  scripts: Record<string, string>
+  scripts: Record<string, string>   // key = display name, value = full shell command
+  projectType: ProjectType
 }
 
 interface StoredGroup {
   id: string
   name: string
   path: string
-  projects: StoredProject[]
+  projects: ScannedProject[]
 }
+
+// ─── Config persistence ────────────────────────────────────────────────────
+const CONFIG_DIR  = path.join(os.homedir(), '.devlauncher')
+const CONFIG_FILE = path.join(CONFIG_DIR, 'groups.json')
 
 function loadGroups(): StoredGroup[] {
   try {
     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
     if (!fs.existsSync(CONFIG_FILE)) return []
     return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'))
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 function saveGroups(groups: StoredGroup[]) {
@@ -37,52 +39,117 @@ function saveGroups(groups: StoredGroup[]) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(groups, null, 2))
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+function uid() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
-function readPkg(folderPath: string): { name: string; scripts: Record<string, string> } | null {
+// ─── Project detectors ─────────────────────────────────────────────────────
+
+function readNpm(folderPath: string): ScannedProject | null {
   const pkgPath = path.join(folderPath, 'package.json')
   if (!fs.existsSync(pkgPath)) return null
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-    return {
-      name: pkg.name || path.basename(folderPath),
-      scripts: pkg.scripts || {},
+    const rawScripts: Record<string, string> = pkg.scripts || {}
+    // Convert to full commands
+    const scripts: Record<string, string> = {}
+    for (const key of Object.keys(rawScripts)) {
+      scripts[key] = `npm run ${key}`
     }
-  } catch {
-    return null
-  }
+    return {
+      id: uid(),
+      name: pkg.name || path.basename(folderPath),
+      path: folderPath,
+      scripts,
+      projectType: 'npm',
+    }
+  } catch { return null }
 }
 
-function scanFolder(folderPath: string): StoredProject[] {
-  const results: StoredProject[] = []
-  let entries: fs.Dirent[]
+function readMaven(folderPath: string): ScannedProject | null {
+  const pomPath = path.join(folderPath, 'pom.xml')
+  if (!fs.existsSync(pomPath)) return null
   try {
-    entries = fs.readdirSync(folderPath, { withFileTypes: true })
-  } catch {
-    return results
-  }
+    const content = fs.readFileSync(pomPath, 'utf-8')
+    // Extract artifactId (first occurrence = project itself, not parent)
+    const artifactMatch = content.match(/<artifactId>([^<]+)<\/artifactId>/)
+    const name = artifactMatch ? artifactMatch[1].trim() : path.basename(folderPath)
+
+    const mvn = process.platform === 'win32' ? 'mvn.cmd' : 'mvn'
+
+    // Check for Maven wrapper
+    const mvnw = path.join(folderPath, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw')
+    const runner = fs.existsSync(mvnw) ? (process.platform === 'win32' ? 'mvnw.cmd' : './mvnw') : mvn
+
+    const scripts: Record<string, string> = {
+      'spring-boot:run': `${runner} spring-boot:run`,
+      'clean install':   `${runner} clean install`,
+      'test':            `${runner} test`,
+      'package':         `${runner} package -DskipTests`,
+      'clean':           `${runner} clean`,
+    }
+
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'maven' }
+  } catch { return null }
+}
+
+function readGradle(folderPath: string): ScannedProject | null {
+  const gradlePath    = path.join(folderPath, 'build.gradle')
+  const gradleKtsPath = path.join(folderPath, 'build.gradle.kts')
+  if (!fs.existsSync(gradlePath) && !fs.existsSync(gradleKtsPath)) return null
+
+  try {
+    // Prefer Gradle wrapper
+    const gradlew = path.join(folderPath, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew')
+    const runner = fs.existsSync(gradlew)
+      ? (process.platform === 'win32' ? 'gradlew.bat' : './gradlew')
+      : (process.platform === 'win32' ? 'gradle.bat' : 'gradle')
+
+    // Try to get project name from settings.gradle
+    let name = path.basename(folderPath)
+    const settingsPath = path.join(folderPath, 'settings.gradle')
+    const settingsKtsPath = path.join(folderPath, 'settings.gradle.kts')
+    const settingsFile = fs.existsSync(settingsPath) ? settingsPath : fs.existsSync(settingsKtsPath) ? settingsKtsPath : null
+    if (settingsFile) {
+      const settings = fs.readFileSync(settingsFile, 'utf-8')
+      const nameMatch = settings.match(/rootProject\.name\s*=\s*['"]([^'"]+)['"]/)
+      if (nameMatch) name = nameMatch[1]
+    }
+
+    const scripts: Record<string, string> = {
+      'bootRun':   `${runner} bootRun`,
+      'build':     `${runner} build`,
+      'test':      `${runner} test`,
+      'clean':     `${runner} clean`,
+      'jar':       `${runner} jar`,
+    }
+
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'gradle' }
+  } catch { return null }
+}
+
+function detectProject(folderPath: string): ScannedProject | null {
+  return readNpm(folderPath) || readMaven(folderPath) || readGradle(folderPath)
+}
+
+function scanFolder(folderPath: string): ScannedProject[] {
+  const results: ScannedProject[] = []
+  let entries: fs.Dirent[]
+  try { entries = fs.readdirSync(folderPath, { withFileTypes: true }) }
+  catch { return results }
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue
-
+    if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'target' || entry.name === 'build') continue
     const subPath = path.join(folderPath, entry.name)
-    const pkg = readPkg(subPath)
-    if (pkg) {
-      results.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: pkg.name,
-        path: subPath,
-        scripts: pkg.scripts,
-      })
-    }
+    const project = detectProject(subPath)
+    if (project) results.push(project)
   }
-
   return results
 }
 
 // ─── Process registry ──────────────────────────────────────────────────────
-const runningProcesses = new Map<string, ChildProcess>() // key: `${projectId}:${script}`
+const runningProcesses = new Map<string, ChildProcess>()
 
 // ─── Window ────────────────────────────────────────────────────────────────
 let win: BrowserWindow | null = null
@@ -94,14 +161,13 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0b1120',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   })
-
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
@@ -113,9 +179,7 @@ app.whenReady().then(createWindow)
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 
-// ─── IPC Handlers ──────────────────────────────────────────────────────────
-
-// Open folder picker — auto-detect single project vs group
+// ─── IPC: pick folder ──────────────────────────────────────────────────────
 ipcMain.handle('pick-project-folder', async () => {
   const result = await dialog.showOpenDialog(win!, {
     properties: ['openDirectory'],
@@ -126,45 +190,38 @@ ipcMain.handle('pick-project-folder', async () => {
   const folderPath = result.filePaths[0]
   const folderName = path.basename(folderPath)
 
-  // Case 1: folder itself has package.json → single project group
-  const ownPkg = readPkg(folderPath)
-  if (ownPkg) {
+  // Case 1: folder itself is a project
+  const own = detectProject(folderPath)
+  if (own) {
     return {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: ownPkg.name,
+      id: uid(),
+      name: own.name,
       path: folderPath,
-      projects: [{
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: ownPkg.name,
-        path: folderPath,
-        scripts: ownPkg.scripts,
-      }],
+      projects: [own],
     } as StoredGroup
   }
 
-  // Case 2: scan subdirectories for package.json files
+  // Case 2: scan sub-directories
   const projects = scanFolder(folderPath)
   if (projects.length === 0) {
-    return { error: 'No package.json found in this folder or its subdirectories' }
+    return { error: 'No supported project found (package.json / pom.xml / build.gradle)' }
   }
 
   return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id: uid(),
     name: folderName,
     path: folderPath,
     projects,
   } as StoredGroup
 })
 
-ipcMain.handle('get-groups', () => loadGroups())
-ipcMain.handle('save-groups', (_e, groups: StoredGroup[]) => { saveGroups(groups); return true })
+ipcMain.handle('get-groups',   () => loadGroups())
+ipcMain.handle('save-groups',  (_e, groups: StoredGroup[]) => { saveGroups(groups); return true })
 
-// Start a script
-ipcMain.handle('start-process', (_e, projectId: string, projectPath: string, script: string) => {
-  const key = `${projectId}:${script}`
-  if (runningProcesses.has(key)) return { error: 'Already running' }
+// ─── IPC: process control ──────────────────────────────────────────────────
 
-  const child = spawn('npm', ['run', script], {
+function spawnProcess(projectPath: string, command: string, key: string) {
+  const child = spawn(command, {
     cwd: projectPath,
     shell: true,
     env: { ...process.env },
@@ -183,12 +240,20 @@ ipcMain.handle('start-process', (_e, projectId: string, projectPath: string, scr
     win?.webContents.send('process-exit', { key, code })
   })
 
+  return child
+}
+
+// start-process: (projectId, projectPath, scriptKey, command)
+ipcMain.handle('start-process', (_e, projectId: string, projectPath: string, scriptKey: string, command: string) => {
+  const key = `${projectId}:${scriptKey}`
+  if (runningProcesses.has(key)) return { error: 'Already running' }
+  spawnProcess(projectPath, command, key)
   return { success: true }
 })
 
-// Stop a script
-ipcMain.handle('stop-process', (_e, projectId: string, script: string) => {
-  const key = `${projectId}:${script}`
+// stop-process: (projectId, scriptKey)
+ipcMain.handle('stop-process', (_e, projectId: string, scriptKey: string) => {
+  const key = `${projectId}:${scriptKey}`
   const child = runningProcesses.get(key)
   if (!child) return { error: 'Not running' }
   child.kill('SIGTERM')
@@ -196,35 +261,16 @@ ipcMain.handle('stop-process', (_e, projectId: string, script: string) => {
   return { success: true }
 })
 
-// Restart a script
-ipcMain.handle('restart-process', async (_e, projectId: string, projectPath: string, script: string) => {
-  const key = `${projectId}:${script}`
-  const child = runningProcesses.get(key)
-  if (child) {
-    child.kill('SIGTERM')
+// restart-process: (projectId, projectPath, scriptKey, command)
+ipcMain.handle('restart-process', async (_e, projectId: string, projectPath: string, scriptKey: string, command: string) => {
+  const key = `${projectId}:${scriptKey}`
+  const existing = runningProcesses.get(key)
+  if (existing) {
+    existing.kill('SIGTERM')
     runningProcesses.delete(key)
     await new Promise(r => setTimeout(r, 500))
   }
-
-  const newChild = spawn('npm', ['run', script], {
-    cwd: projectPath,
-    shell: true,
-    env: { ...process.env },
-  })
-
-  runningProcesses.set(key, newChild)
-
-  newChild.stdout?.on('data', (data: Buffer) => {
-    win?.webContents.send('process-log', { key, data: data.toString(), type: 'stdout' })
-  })
-  newChild.stderr?.on('data', (data: Buffer) => {
-    win?.webContents.send('process-log', { key, data: data.toString(), type: 'stderr' })
-  })
-  newChild.on('exit', (code) => {
-    runningProcesses.delete(key)
-    win?.webContents.send('process-exit', { key, code })
-  })
-
+  spawnProcess(projectPath, command, key)
   return { success: true }
 })
 

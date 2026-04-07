@@ -12,9 +12,9 @@ declare global {
       pickProjectFolder: () => Promise<ProjectGroupType | { error: string } | null>
       getGroups: () => Promise<ProjectGroupType[]>
       saveGroups: (groups: ProjectGroupType[]) => Promise<boolean>
-      startProcess: (projectId: string, projectPath: string, script: string) => Promise<{ success?: boolean; error?: string }>
-      stopProcess: (projectId: string, script: string) => Promise<{ success?: boolean; error?: string }>
-      restartProcess: (projectId: string, projectPath: string, script: string) => Promise<{ success?: boolean; error?: string }>
+      startProcess: (projectId: string, projectPath: string, scriptKey: string, command: string) => Promise<{ success?: boolean; error?: string }>
+      stopProcess: (projectId: string, scriptKey: string) => Promise<{ success?: boolean; error?: string }>
+      restartProcess: (projectId: string, projectPath: string, scriptKey: string, command: string) => Promise<{ success?: boolean; error?: string }>
       getRunning: () => Promise<string[]>
       onProcessLog: (cb: (p: { key: string; data: string; type: 'stdout' | 'stderr' }) => void) => () => void
       onProcessExit: (cb: (p: { key: string; code: number | null }) => void) => () => void

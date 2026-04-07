@@ -1,8 +1,11 @@
+export type ProjectType = 'npm' | 'maven' | 'gradle'
+
 export interface Project {
   id: string
   name: string
   path: string
-  scripts: Record<string, string>
+  scripts: Record<string, string>  // key = display name, value = full shell command
+  projectType: ProjectType
 }
 
 export interface ProjectGroup {

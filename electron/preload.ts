@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   pickProjectFolder: () => ipcRenderer.invoke('pick-project-folder'),
-  getProjects: () => ipcRenderer.invoke('get-projects'),
-  saveProjects: (projects: unknown) => ipcRenderer.invoke('save-projects', projects),
+  getGroups: () => ipcRenderer.invoke('get-groups'),
+  saveGroups: (groups: unknown) => ipcRenderer.invoke('save-groups', groups),
   startProcess: (projectId: string, projectPath: string, script: string) =>
     ipcRenderer.invoke('start-process', projectId, projectPath, script),
   stopProcess: (projectId: string, script: string) =>

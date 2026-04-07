@@ -2,15 +2,15 @@ import { useEffect } from 'react'
 import { useStore } from './store'
 import { Sidebar } from './components/Sidebar'
 import { LogViewer } from './components/LogViewer'
-import { ProjectCard } from './components/ProjectCard'
-import { Project } from './types'
+import { ProjectGroup } from './components/ProjectGroup'
+import { ProjectGroup as ProjectGroupType } from './types'
 
 declare global {
   interface Window {
     electronAPI: {
-      pickProjectFolder: () => Promise<{ name: string; path: string; scripts: Record<string, string> } | { error: string } | null>
-      getProjects: () => Promise<Project[]>
-      saveProjects: (projects: Project[]) => Promise<boolean>
+      pickProjectFolder: () => Promise<ProjectGroupType | { error: string } | null>
+      getGroups: () => Promise<ProjectGroupType[]>
+      saveGroups: (groups: ProjectGroupType[]) => Promise<boolean>
       startProcess: (projectId: string, projectPath: string, script: string) => Promise<{ success?: boolean; error?: string }>
       stopProcess: (projectId: string, script: string) => Promise<{ success?: boolean; error?: string }>
       restartProcess: (projectId: string, projectPath: string, script: string) => Promise<{ success?: boolean; error?: string }>
@@ -22,75 +22,50 @@ declare global {
 }
 
 export default function App() {
-  const { projects, setProjects, addProject, removeProject, setStatus, appendLog, setSelectedLog, selectedLog } = useStore()
+  const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, setSelectedLog, selectedLog } = useStore()
 
-  // Load projects on mount
   useEffect(() => {
-    window.electronAPI.getProjects().then((saved) => {
-      setProjects(saved)
-    })
-
-    window.electronAPI.getRunning().then((keys) => {
-      keys.forEach((key) => setStatus(key, 'running'))
-    })
+    window.electronAPI.getGroups().then(setGroups)
+    window.electronAPI.getRunning().then((keys) => keys.forEach((k) => setStatus(k, 'running')))
 
     const unsubLog = window.electronAPI.onProcessLog(({ key, data, type }) => {
       appendLog(key, { type, data, timestamp: Date.now() })
     })
-
     const unsubExit = window.electronAPI.onProcessExit(({ key, code }) => {
       setStatus(key, code === 0 ? 'stopped' : 'error')
-      appendLog(key, {
-        type: 'system',
-        data: `Process exited with code ${code}`,
-        timestamp: Date.now(),
-      })
+      appendLog(key, { type: 'system', data: `Process exited with code ${code}`, timestamp: Date.now() })
     })
 
-    return () => {
-      unsubLog()
-      unsubExit()
-    }
+    return () => { unsubLog(); unsubExit() }
   }, [])
 
-  // Persist whenever projects change
   useEffect(() => {
-    if (projects.length > 0) {
-      window.electronAPI.saveProjects(projects)
-    }
-  }, [projects])
+    if (groups.length > 0) window.electronAPI.saveGroups(groups)
+  }, [groups])
 
-  const handleAddProject = async () => {
+  const handleAdd = async () => {
     const result = await window.electronAPI.pickProjectFolder()
     if (!result) return
     if ('error' in result) { alert(result.error); return }
-
-    const newProject: Project = {
-      id: crypto.randomUUID(),
-      name: result.name,
-      path: result.path,
-      scripts: result.scripts,
-    }
-    addProject(newProject)
-    await window.electronAPI.saveProjects([...projects, newProject])
+    addGroup(result)
+    await window.electronAPI.saveGroups([...groups, result])
   }
 
   const handleRemove = (id: string) => {
-    removeProject(id)
-    const updated = projects.filter((p) => p.id !== id)
-    window.electronAPI.saveProjects(updated)
+    removeGroup(id)
+    window.electronAPI.saveGroups(groups.filter((g) => g.id !== id))
   }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar projects={projects} onAddProject={handleAddProject} onRemove={handleRemove} />
+      <Sidebar groups={groups} onAddProject={handleAdd} onRemove={handleRemove} />
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {projects.length === 0 ? (
-            <EmptyState onAdd={handleAddProject} />
+          {groups.length === 0 ? (
+            <EmptyState onAdd={handleAdd} />
           ) : (
-            projects.map((p) => (
-              <ProjectCard key={p.id} project={p} onRemove={() => handleRemove(p.id)} />
+            groups.map((g) => (
+              <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} />
             ))
           )}
         </div>
@@ -104,10 +79,10 @@ export default function App() {
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', color: 'var(--text-muted)' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', color: 'var(--text-muted)', marginTop: '15vh' }}>
       <div style={{ fontSize: '48px' }}>🚀</div>
       <p style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>No projects yet</p>
-      <p>Add a project folder to get started</p>
+      <p>Add a single project or a folder containing multiple projects</p>
       <button onClick={onAdd} style={{ marginTop: '8px', padding: '10px 24px', background: 'var(--accent)', color: '#fff', borderRadius: '8px', fontSize: '14px', fontWeight: 600 }}>
         + Add Project
       </button>

@@ -6,9 +6,23 @@ import * as os from 'os'
 
 // ─── Config persistence ────────────────────────────────────────────────────
 const CONFIG_DIR = path.join(os.homedir(), '.devlauncher')
-const CONFIG_FILE = path.join(CONFIG_DIR, 'projects.json')
+const CONFIG_FILE = path.join(CONFIG_DIR, 'groups.json')
 
-function loadProjects(): StoredProject[] {
+interface StoredProject {
+  id: string
+  name: string
+  path: string
+  scripts: Record<string, string>
+}
+
+interface StoredGroup {
+  id: string
+  name: string
+  path: string
+  projects: StoredProject[]
+}
+
+function loadGroups(): StoredGroup[] {
   try {
     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
     if (!fs.existsSync(CONFIG_FILE)) return []
@@ -18,16 +32,53 @@ function loadProjects(): StoredProject[] {
   }
 }
 
-function saveProjects(projects: StoredProject[]) {
+function saveGroups(groups: StoredGroup[]) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(projects, null, 2))
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(groups, null, 2))
 }
 
-interface StoredProject {
-  id: string
-  name: string
-  path: string
-  scripts: Record<string, string>
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function readPkg(folderPath: string): { name: string; scripts: Record<string, string> } | null {
+  const pkgPath = path.join(folderPath, 'package.json')
+  if (!fs.existsSync(pkgPath)) return null
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+    return {
+      name: pkg.name || path.basename(folderPath),
+      scripts: pkg.scripts || {},
+    }
+  } catch {
+    return null
+  }
+}
+
+function scanFolder(folderPath: string): StoredProject[] {
+  const results: StoredProject[] = []
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(folderPath, { withFileTypes: true })
+  } catch {
+    return results
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue
+
+    const subPath = path.join(folderPath, entry.name)
+    const pkg = readPkg(subPath)
+    if (pkg) {
+      results.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: pkg.name,
+        path: subPath,
+        scripts: pkg.scripts,
+      })
+    }
+  }
+
+  return results
 }
 
 // ─── Process registry ──────────────────────────────────────────────────────
@@ -59,18 +110,12 @@ function createWindow() {
 }
 
 app.whenReady().then(createWindow)
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
-})
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 
 // ─── IPC Handlers ──────────────────────────────────────────────────────────
 
-// Open folder picker and read package.json
+// Open folder picker — auto-detect single project vs group
 ipcMain.handle('pick-project-folder', async () => {
   const result = await dialog.showOpenDialog(win!, {
     properties: ['openDirectory'],
@@ -79,28 +124,40 @@ ipcMain.handle('pick-project-folder', async () => {
   if (result.canceled || result.filePaths.length === 0) return null
 
   const folderPath = result.filePaths[0]
-  const pkgPath = path.join(folderPath, 'package.json')
+  const folderName = path.basename(folderPath)
 
-  if (!fs.existsSync(pkgPath)) {
-    return { error: 'No package.json found in this folder' }
+  // Case 1: folder itself has package.json → single project group
+  const ownPkg = readPkg(folderPath)
+  if (ownPkg) {
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: ownPkg.name,
+      path: folderPath,
+      projects: [{
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: ownPkg.name,
+        path: folderPath,
+        scripts: ownPkg.scripts,
+      }],
+    } as StoredGroup
   }
 
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+  // Case 2: scan subdirectories for package.json files
+  const projects = scanFolder(folderPath)
+  if (projects.length === 0) {
+    return { error: 'No package.json found in this folder or its subdirectories' }
+  }
+
   return {
-    name: pkg.name || path.basename(folderPath),
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name: folderName,
     path: folderPath,
-    scripts: pkg.scripts || {},
-  }
+    projects,
+  } as StoredGroup
 })
 
-// Load persisted projects
-ipcMain.handle('get-projects', () => loadProjects())
-
-// Save projects list
-ipcMain.handle('save-projects', (_e, projects: StoredProject[]) => {
-  saveProjects(projects)
-  return true
-})
+ipcMain.handle('get-groups', () => loadGroups())
+ipcMain.handle('save-groups', (_e, groups: StoredGroup[]) => { saveGroups(groups); return true })
 
 // Start a script
 ipcMain.handle('start-process', (_e, projectId: string, projectPath: string, script: string) => {
@@ -118,11 +175,9 @@ ipcMain.handle('start-process', (_e, projectId: string, projectPath: string, scr
   child.stdout?.on('data', (data: Buffer) => {
     win?.webContents.send('process-log', { key, data: data.toString(), type: 'stdout' })
   })
-
   child.stderr?.on('data', (data: Buffer) => {
     win?.webContents.send('process-log', { key, data: data.toString(), type: 'stderr' })
   })
-
   child.on('exit', (code) => {
     runningProcesses.delete(key)
     win?.webContents.send('process-exit', { key, code })
@@ -136,7 +191,6 @@ ipcMain.handle('stop-process', (_e, projectId: string, script: string) => {
   const key = `${projectId}:${script}`
   const child = runningProcesses.get(key)
   if (!child) return { error: 'Not running' }
-
   child.kill('SIGTERM')
   runningProcesses.delete(key)
   return { success: true }
@@ -163,11 +217,9 @@ ipcMain.handle('restart-process', async (_e, projectId: string, projectPath: str
   newChild.stdout?.on('data', (data: Buffer) => {
     win?.webContents.send('process-log', { key, data: data.toString(), type: 'stdout' })
   })
-
   newChild.stderr?.on('data', (data: Buffer) => {
     win?.webContents.send('process-log', { key, data: data.toString(), type: 'stderr' })
   })
-
   newChild.on('exit', (code) => {
     runningProcesses.delete(key)
     win?.webContents.send('process-exit', { key, code })
@@ -176,5 +228,4 @@ ipcMain.handle('restart-process', async (_e, projectId: string, projectPath: str
   return { success: true }
 })
 
-// Get running processes keys
 ipcMain.handle('get-running', () => Array.from(runningProcesses.keys()))

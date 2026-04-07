@@ -3,7 +3,6 @@ import { useStore } from '../store'
 
 interface Props {
   project: Project
-  onRemove: () => void
 }
 
 const PRIORITY_SCRIPTS = ['dev', 'start', 'serve', 'preview', 'build', 'test']
@@ -15,7 +14,7 @@ function sortScripts(scripts: Record<string, string>): string[] {
   return [...priority, ...rest]
 }
 
-export function ProjectCard({ project, onRemove }: Props) {
+export function ProjectCard({ project }: Props) {
   const { statuses, setStatus, appendLog, setSelectedLog, selectedLog } = useStore()
   const scripts = sortScripts(project.scripts)
 
@@ -57,23 +56,18 @@ export function ProjectCard({ project, onRemove }: Props) {
   }
 
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>{project.name}</h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>{project.path}</p>
-        </div>
-        <button onClick={onRemove} title="Remove project" style={{ background: 'transparent', color: 'var(--text-muted)', fontSize: '18px', padding: '4px 8px', borderRadius: '6px' }}>
-          ×
-        </button>
+      <div>
+        <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '2px' }}>{project.name}</h3>
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>{project.path}</p>
       </div>
 
       {/* Scripts */}
       {scripts.length === 0 ? (
         <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No scripts found in package.json</p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {scripts.map((script) => {
             const status = getStatus(script)
             const key = getKey(script)
@@ -81,35 +75,33 @@ export function ProjectCard({ project, onRemove }: Props) {
             const isSelected = selectedLog === key
 
             return (
-              <div key={script} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--surface2)', borderRadius: '8px', border: isSelected ? '1px solid var(--accent)' : '1px solid transparent' }}>
+              <div key={script} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--bg)', borderRadius: '7px', border: isSelected ? '1px solid var(--accent)' : '1px solid transparent' }}>
                 {statusDot(status)}
-                <span style={{ flex: 1, fontFamily: 'var(--mono)', fontSize: '13px', fontWeight: 500 }}>
+                <span style={{ flex: 1, fontFamily: 'var(--mono)', fontSize: '12px', fontWeight: 500 }}>
                   {script}
                 </span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', minWidth: 50, textAlign: 'right' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', minWidth: 46, textAlign: 'right' }}>
                   {status}
                 </span>
 
-                {/* Logs button */}
                 <button onClick={() => setSelectedLog(isSelected ? null : key)}
-                  style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '12px', background: isSelected ? 'var(--accent)' : 'var(--border)', color: '#fff', fontWeight: 500 }}>
+                  style={{ padding: '4px 9px', borderRadius: '5px', fontSize: '11px', background: isSelected ? 'var(--accent)' : 'var(--border)', color: '#fff', fontWeight: 500 }}>
                   logs
                 </button>
 
-                {/* Action buttons */}
                 {!isRunning ? (
                   <button onClick={() => start(script)}
-                    style={{ padding: '5px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--green)', color: '#fff', fontWeight: 600 }}>
+                    style={{ padding: '4px 12px', borderRadius: '5px', fontSize: '11px', background: 'var(--green)', color: '#fff', fontWeight: 600 }}>
                     ▶ Run
                   </button>
                 ) : (
                   <>
                     <button onClick={() => restart(script)}
-                      style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '12px', background: 'var(--yellow)', color: '#000', fontWeight: 600 }}>
+                      style={{ padding: '4px 9px', borderRadius: '5px', fontSize: '11px', background: 'var(--yellow)', color: '#000', fontWeight: 600 }}>
                       ↺ Restart
                     </button>
                     <button onClick={() => stop(script)}
-                      style={{ padding: '5px 12px', borderRadius: '6px', fontSize: '12px', background: 'var(--red)', color: '#fff', fontWeight: 600 }}>
+                      style={{ padding: '4px 10px', borderRadius: '5px', fontSize: '11px', background: 'var(--red)', color: '#fff', fontWeight: 600 }}>
                       ■ Stop
                     </button>
                   </>

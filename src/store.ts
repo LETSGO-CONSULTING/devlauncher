@@ -1,15 +1,17 @@
 import { create } from 'zustand'
-import { Project, ProcessStatus, LogEntry } from './types'
+import { ProjectGroup, ProcessStatus, LogEntry } from './types'
 
 interface AppState {
-  projects: Project[]
-  statuses: Record<string, ProcessStatus>   // key: `${projectId}:${script}`
-  logs: Record<string, LogEntry[]>          // key: `${projectId}:${script}`
+  groups: ProjectGroup[]
+  expanded: Record<string, boolean>          // groupId → open/closed
+  statuses: Record<string, ProcessStatus>    // `${projectId}:${script}`
+  logs: Record<string, LogEntry[]>           // `${projectId}:${script}`
   selectedLog: string | null
 
-  setProjects: (projects: Project[]) => void
-  addProject: (project: Project) => void
-  removeProject: (id: string) => void
+  setGroups: (groups: ProjectGroup[]) => void
+  addGroup: (group: ProjectGroup) => void
+  removeGroup: (id: string) => void
+  toggleExpanded: (id: string) => void
   setStatus: (key: string, status: ProcessStatus) => void
   appendLog: (key: string, entry: LogEntry) => void
   clearLog: (key: string) => void
@@ -17,18 +19,25 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  projects: [],
+  groups: [],
+  expanded: {},
   statuses: {},
   logs: {},
   selectedLog: null,
 
-  setProjects: (projects) => set({ projects }),
+  setGroups: (groups) => set({ groups }),
 
-  addProject: (project) =>
-    set((s) => ({ projects: [...s.projects, project] })),
+  addGroup: (group) =>
+    set((s) => ({
+      groups: [...s.groups, group],
+      expanded: { ...s.expanded, [group.id]: true },
+    })),
 
-  removeProject: (id) =>
-    set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
+  removeGroup: (id) =>
+    set((s) => ({ groups: s.groups.filter((g) => g.id !== id) })),
+
+  toggleExpanded: (id) =>
+    set((s) => ({ expanded: { ...s.expanded, [id]: !s.expanded[id] } })),
 
   setStatus: (key, status) =>
     set((s) => ({ statuses: { ...s.statuses, [key]: status } })),
@@ -36,7 +45,6 @@ export const useStore = create<AppState>((set) => ({
   appendLog: (key, entry) =>
     set((s) => {
       const prev = s.logs[key] ?? []
-      // keep last 2000 lines
       const next = prev.length >= 2000 ? [...prev.slice(-1999), entry] : [...prev, entry]
       return { logs: { ...s.logs, [key]: next } }
     }),

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ProjectGroup as ProjectGroupType } from '../types'
 import { useStore } from '../store'
 import { ProjectCard } from './ProjectCard'
@@ -45,6 +46,10 @@ function getGroupColor(id: string) {
 export function ProjectGroup({ group, onRemove }: Props) {
   const { statuses } = useStore()
 
+  // All services start collapsed
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+
   const runningCount = group.projects.reduce((acc, p) =>
     acc + Object.keys(p.scripts).filter(
       (s) => statuses[`${p.id}:${s}`] === 'running'
@@ -52,9 +57,8 @@ export function ProjectGroup({ group, onRemove }: Props) {
   )
 
   const isRunning = runningCount > 0
-  const iconBg = getGroupColor(group.id)
+  const iconBg    = getGroupColor(group.id)
 
-  // Subtitle: sub-project names joined or just the folder path
   const subtitle = group.projects.length > 1
     ? `${group.projects.length} SERVICES`
     : group.projects[0]?.path.split('/').slice(-2).join(' / ').toUpperCase()
@@ -83,18 +87,56 @@ export function ProjectGroup({ group, onRemove }: Props) {
         </button>
       </div>
 
-      {/* Sub-projects & scripts */}
-      {group.projects.map((project, idx) => (
-        <div key={project.id} className="sub-project-section">
-          {group.projects.length > 1 && (
-            <div className="sub-project-header" style={{ borderTopColor: idx === 0 ? 'transparent' : undefined }}>
-              <span style={{ color: 'var(--accent)', fontSize: 11 }}>▸</span>
-              {project.name}
+      {/* Sub-projects — each collapsible, starts collapsed */}
+      {group.projects.map((project) => {
+        const isOpen        = expanded[project.id] ?? false
+        const projectRunning = Object.keys(project.scripts).some(
+          (s) => statuses[`${project.id}:${s}`] === 'running'
+        )
+
+        return (
+          <div key={project.id} className="sub-project-section">
+            {/* Collapsible header — always shown */}
+            <div
+              className="sub-project-header"
+              onClick={() => toggle(project.id)}
+              style={{ cursor: 'pointer', userSelect: 'none', justifyContent: 'space-between' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Chevron */}
+                <span style={{
+                  display: 'inline-block',
+                  fontSize: 10,
+                  color: 'var(--accent)',
+                  transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.18s ease',
+                }}>
+                  ▶
+                </span>
+                <span style={{ color: 'var(--text-dim)', fontWeight: 600, fontSize: 11 }}>
+                  {project.name}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  ({Object.keys(project.scripts).length} scripts)
+                </span>
+              </div>
+
+              {/* Running indicator */}
+              {projectRunning && (
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: 'var(--green)', display: 'inline-block',
+                  marginRight: 4,
+                  animation: 'pulse-green 1.8s ease-in-out infinite',
+                }} />
+              )}
             </div>
-          )}
-          <ProjectCard project={project} />
-        </div>
-      ))}
+
+            {/* Scripts — only when expanded */}
+            {isOpen && <ProjectCard project={project} />}
+          </div>
+        )
+      })}
     </div>
   )
 }

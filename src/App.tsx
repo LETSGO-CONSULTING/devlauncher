@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from './store'
 import { Sidebar } from './components/Sidebar'
+import { TopBar } from './components/TopBar'
 import { LogViewer } from './components/LogViewer'
 import { ProjectGroup } from './components/ProjectGroup'
 import { ProjectGroup as ProjectGroupType } from './types'
@@ -23,6 +24,9 @@ declare global {
 
 export default function App() {
   const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, setSelectedLog, selectedLog } = useStore()
+  const [sidebarTab, setSidebarTab] = useState('dashboard')
+  const [topbarTab, setTopbarTab]   = useState('Cluster')
+  const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
 
   useEffect(() => {
     window.electronAPI.getGroups().then(setGroups)
@@ -35,7 +39,6 @@ export default function App() {
       setStatus(key, code === 0 ? 'stopped' : 'error')
       appendLog(key, { type: 'system', data: `Process exited with code ${code}`, timestamp: Date.now() })
     })
-
     return () => { unsubLog(); unsubExit() }
   }, [])
 
@@ -57,35 +60,57 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar groups={groups} onAddProject={handleAdd} onRemove={handleRemove} />
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="app-shell">
+      <Sidebar
+        groups={groups}
+        onAddProject={handleAdd}
+        onRemove={handleRemove}
+        activeTab={sidebarTab}
+        onTabChange={setSidebarTab}
+      />
+
+      <div className="main-area">
+        <TopBar activeTab={topbarTab} onTabChange={setTopbarTab} />
+
+        <div className="workspace">
+          {/* Workspace header */}
+          <div className="workspace-header">
+            <div>
+              <div className="workspace-title">Workspace</div>
+              <div className="workspace-subtitle">Active development environment cluster</div>
+            </div>
+            <div className="view-toggle">
+              <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>⊞</button>
+              <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>≡</button>
+            </div>
+          </div>
+
+          {/* Cards */}
           {groups.length === 0 ? (
-            <EmptyState onAdd={handleAdd} />
+            <div className="empty-state">
+              <div className="empty-state-icon">🚀</div>
+              <div className="empty-state-title">No projects yet</div>
+              <div className="empty-state-desc">
+                Add a project folder or a workspace folder containing multiple projects
+              </div>
+              <button className="empty-state-btn" onClick={handleAdd}>
+                + New Project
+              </button>
+            </div>
           ) : (
-            groups.map((g) => (
-              <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} />
-            ))
+            <div className={viewMode === 'grid' ? 'cards-grid' : ''} style={viewMode === 'list' ? { display: 'flex', flexDirection: 'column', gap: 12 } : {}}>
+              {groups.map((g) => (
+                <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} />
+              ))}
+            </div>
           )}
         </div>
+
+        {/* Debug console */}
         {selectedLog && (
           <LogViewer processKey={selectedLog} onClose={() => setSelectedLog(null)} />
         )}
-      </main>
-    </div>
-  )
-}
-
-function EmptyState({ onAdd }: { onAdd: () => void }) {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', color: 'var(--text-muted)', marginTop: '15vh' }}>
-      <div style={{ fontSize: '48px' }}>🚀</div>
-      <p style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>No projects yet</p>
-      <p>Add a single project or a folder containing multiple projects</p>
-      <button onClick={onAdd} style={{ marginTop: '8px', padding: '10px 24px', background: 'var(--accent)', color: '#fff', borderRadius: '8px', fontSize: '14px', fontWeight: 600 }}>
-        + Add Project
-      </button>
+      </div>
     </div>
   )
 }

@@ -5,58 +5,97 @@ interface Props {
   groups: ProjectGroup[]
   onAddProject: () => void
   onRemove: (id: string) => void
+  activeTab: string
+  onTabChange: (tab: string) => void
 }
 
-export function Sidebar({ groups, onAddProject }: Props) {
-  const { expanded, toggleExpanded } = useStore()
+const GROUP_COLORS = [
+  '#7c5cfc', '#22d3ee', '#22c55e', '#f59e0b',
+  '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6',
+]
+
+export function Sidebar({ groups, onAddProject, activeTab, onTabChange }: Props) {
+  const { expanded, toggleExpanded, statuses } = useStore()
+
+  const isRunning = (group: ProjectGroup) =>
+    group.projects.some((p) =>
+      Object.keys(p.scripts).some((s) => statuses[`${p.id}:${s}`] === 'running')
+    )
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
+    { id: 'projects',  label: 'Projects',  icon: '▣' },
+    { id: 'console',   label: 'Console',   icon: '⬛' },
+  ]
 
   return (
-    <aside style={{
-      width: '220px',
-      background: 'var(--surface)',
-      borderRight: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      WebkitAppRegion: 'drag' as never,
-    }}>
-      {/* Title bar */}
-      <div style={{ height: '52px', display: 'flex', alignItems: 'center', paddingLeft: '80px', paddingRight: '16px', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontWeight: 700, fontSize: '15px', letterSpacing: '-0.3px' }}>DevLauncher</span>
+    <aside className="sidebar">
+      {/* Logo */}
+      <div className="sidebar-logo">
+        <div className="logo-icon">⚡</div>
+        <div className="logo-text">
+          <div className="logo-name">DevLauncher</div>
+          <div className="logo-version">V 1.0.0-BETA</div>
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '4px 8px 8px' }}>
-          Projects ({groups.length})
-        </p>
-        {groups.map((g) => (
-          <div key={g.id} style={{ marginBottom: '2px' }}>
-            {/* Group row */}
-            <div
-              onClick={() => toggleExpanded(g.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 10px', borderRadius: '6px', fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }}
-            >
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)', transform: expanded[g.id] ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={g.path}>{g.name}</span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{g.projects.length}</span>
-            </div>
-
-            {/* Sub-projects */}
-            {expanded[g.id] && g.projects.map((p) => (
-              <div key={p.id} style={{ padding: '5px 10px 5px 28px', fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.path}>
-                {p.name}
-              </div>
-            ))}
-          </div>
+      {/* Nav */}
+      <nav className="sidebar-nav">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+            onClick={() => onTabChange(item.id)}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            {item.label}
+          </button>
         ))}
+      </nav>
+
+      {/* Recent projects */}
+      <div className="sidebar-section-label">Recent Projects</div>
+      <div className="sidebar-projects">
+        {groups.map((g, i) => {
+          const color = GROUP_COLORS[i % GROUP_COLORS.length]
+          const running = isRunning(g)
+          return (
+            <div key={g.id} className="sidebar-group">
+              <div
+                className="sidebar-group-row"
+                onClick={() => toggleExpanded(g.id)}
+              >
+                <span
+                  className="sidebar-group-dot"
+                  style={{ background: running ? '#22c55e' : '#334155' }}
+                />
+                <span className="sidebar-group-name" style={{ color }} title={g.path}>
+                  {g.name.toUpperCase()}
+                </span>
+              </div>
+              {expanded[g.id] && g.projects.map((p) => (
+                <div key={p.id} className="sidebar-project-item" title={p.path}>
+                  {p.name}
+                </div>
+              ))}
+            </div>
+          )
+        })}
       </div>
 
-      <div style={{ padding: '12px', borderTop: '1px solid var(--border)', WebkitAppRegion: 'no-drag' as never }}>
-        <button
-          onClick={onAddProject}
-          style={{ width: '100%', padding: '9px', background: 'var(--accent)', color: '#fff', borderRadius: '7px', fontWeight: 600, fontSize: '13px' }}
-        >
-          + Add Project
+      {/* Bottom */}
+      <div className="sidebar-bottom">
+        <button className="btn-new-project" onClick={onAddProject}>
+          + New Project
         </button>
+        <div className="sidebar-user">
+          <div className="user-avatar">D</div>
+          <div className="user-info">
+            <div className="user-name">Developer</div>
+            <div className="user-role">Core Contributor</div>
+          </div>
+          <button className="user-settings" title="Settings">⚙</button>
+        </div>
       </div>
     </aside>
   )

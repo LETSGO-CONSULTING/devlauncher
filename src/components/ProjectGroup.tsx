@@ -7,65 +7,94 @@ interface Props {
   onRemove: () => void
 }
 
-export function ProjectGroup({ group, onRemove }: Props) {
-  const { expanded, toggleExpanded, statuses } = useStore()
-  const isOpen = expanded[group.id] ?? true
+const ICON_MAP: Record<string, string> = {
+  api: '🗄️', backend: '🗄️', server: '🗄️',
+  app: '📱', frontend: '🖥️', web: '🌐', site: '🌐',
+  mobile: '📱', manager: '⚙️', admin: '⚙️', dashboard: '📊',
+  docs: '📚', doc: '📚',
+}
 
-  // Count running processes inside this group
-  const runningCount = group.projects.reduce((acc, p) => {
-    return acc + Object.keys(p.scripts).filter(
+function getIcon(name: string): string {
+  const lower = name.toLowerCase()
+  for (const [key, icon] of Object.entries(ICON_MAP)) {
+    if (lower.includes(key)) return icon
+  }
+  return '⚡'
+}
+
+const GROUP_BG_COLORS = [
+  'linear-gradient(135deg,#7c5cfc,#5b3fd8)',
+  'linear-gradient(135deg,#22d3ee,#0891b2)',
+  'linear-gradient(135deg,#22c55e,#15803d)',
+  'linear-gradient(135deg,#f59e0b,#b45309)',
+  'linear-gradient(135deg,#ef4444,#b91c1c)',
+  'linear-gradient(135deg,#ec4899,#9d174d)',
+]
+
+let colorIndex = 0
+const groupColorCache = new Map<string, string>()
+
+function getGroupColor(id: string) {
+  if (!groupColorCache.has(id)) {
+    groupColorCache.set(id, GROUP_BG_COLORS[colorIndex % GROUP_BG_COLORS.length])
+    colorIndex++
+  }
+  return groupColorCache.get(id)!
+}
+
+export function ProjectGroup({ group, onRemove }: Props) {
+  const { statuses } = useStore()
+
+  const runningCount = group.projects.reduce((acc, p) =>
+    acc + Object.keys(p.scripts).filter(
       (s) => statuses[`${p.id}:${s}`] === 'running'
-    ).length
-  }, 0)
+    ).length, 0
+  )
+
+  const isRunning = runningCount > 0
+  const iconBg = getGroupColor(group.id)
+
+  // Subtitle: sub-project names joined or just the folder path
+  const subtitle = group.projects.length > 1
+    ? `${group.projects.length} SERVICES`
+    : group.projects[0]?.path.split('/').slice(-2).join(' / ').toUpperCase()
 
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
-      {/* Group header */}
-      <div
-        onClick={() => toggleExpanded(group.id)}
-        style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', userSelect: 'none', gap: '10px' }}
-      >
-        {/* Chevron */}
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
-          ▶
-        </span>
-
-        {/* Folder icon */}
-        <span style={{ fontSize: '18px' }}>{isOpen ? '📂' : '📁'}</span>
-
-        {/* Name */}
-        <span style={{ fontWeight: 700, fontSize: '15px', flex: 1 }}>{group.name}</span>
-
-        {/* Sub-project count */}
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--surface2)', padding: '2px 8px', borderRadius: '10px' }}>
-          {group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}
-        </span>
-
-        {/* Running badge */}
-        {runningCount > 0 && (
-          <span style={{ fontSize: '12px', color: '#fff', background: 'var(--green)', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
-            {runningCount} running
-          </span>
-        )}
-
-        {/* Remove group */}
+    <div className="group-card">
+      {/* Card header */}
+      <div className="group-card-header">
+        <div className="group-icon" style={{ background: iconBg }}>
+          {getIcon(group.name)}
+        </div>
+        <div className="group-meta">
+          <div className="group-name">{group.name}</div>
+          <div className="group-subtitle">{subtitle}</div>
+        </div>
+        <div className={`status-badge ${isRunning ? 'running' : 'stopped'}`}>
+          <span className="status-dot" />
+          {isRunning ? 'RUNNING' : 'STOPPED'}
+        </div>
         <button
-          onClick={(e) => { e.stopPropagation(); onRemove() }}
-          title="Remove group"
-          style={{ background: 'transparent', color: 'var(--text-muted)', fontSize: '18px', padding: '2px 8px', borderRadius: '6px', lineHeight: 1 }}
+          onClick={onRemove}
+          title="Remove"
+          style={{ background: 'transparent', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px', borderRadius: 6, marginLeft: 4, lineHeight: 1 }}
         >
           ×
         </button>
       </div>
 
-      {/* Sub-projects */}
-      {isOpen && (
-        <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {group.projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
+      {/* Sub-projects & scripts */}
+      {group.projects.map((project, idx) => (
+        <div key={project.id} className="sub-project-section">
+          {group.projects.length > 1 && (
+            <div className="sub-project-header" style={{ borderTopColor: idx === 0 ? 'transparent' : undefined }}>
+              <span style={{ color: 'var(--accent)', fontSize: 11 }}>▸</span>
+              {project.name}
+            </div>
+          )}
+          <ProjectCard project={project} />
         </div>
-      )}
+      ))}
     </div>
   )
 }

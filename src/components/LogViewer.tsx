@@ -15,33 +15,49 @@ export function LogViewer({ processKey, onClose }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [entries.length])
 
+  // Format: SCHOLARGATE/NPM RUN DEV
+  const label = processKey
+    .replace(':', '/')
+    .replace('npm run ', 'npm run ')
+    .toUpperCase()
+    .split(':')[0]
+
   return (
-    <div style={{ height: '280px', borderTop: '1px solid var(--border)', background: '#0a0f1e', display: 'flex', flexDirection: 'column' }}>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', borderBottom: '1px solid var(--border)', gap: '12px' }}>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--accent)', flex: 1 }}>
-          {processKey}
+    <div className="log-console">
+      {/* Console bar */}
+      <div className="log-console-bar">
+        <div className="traffic-lights">
+          <span className="tl tl-red" />
+          <span className="tl tl-yellow" />
+          <span className="tl tl-green" />
+        </div>
+        <span className="console-terminal-icon">⬛</span>
+        <span className="console-label">
+          Active Debug Console — {label}
         </span>
-        <button onClick={() => clearLog(processKey)}
-          style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'transparent', padding: '3px 8px' }}>
+        <button className="btn-console-clear" onClick={() => clearLog(processKey)}>
           Clear
         </button>
-        <button onClick={onClose}
-          style={{ fontSize: '16px', color: 'var(--text-muted)', background: 'transparent', padding: '3px 8px' }}>
-          ×
-        </button>
+        <button className="btn-console-close" onClick={onClose}>×</button>
       </div>
 
       {/* Log output */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', fontFamily: 'var(--mono)', fontSize: '12px', lineHeight: '1.6' }}>
+      <div className="log-output">
         {entries.length === 0 ? (
-          <span style={{ color: 'var(--text-muted)' }}>No output yet...</span>
+          <span style={{ color: 'var(--text-muted)' }}>Waiting for output...</span>
         ) : (
-          entries.map((entry, i) => (
-            <div key={i} style={{ color: entry.type === 'stderr' ? 'var(--red)' : entry.type === 'system' ? 'var(--yellow)' : 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-              {entry.data}
-            </div>
-          ))
+          entries.map((entry, i) => {
+            const ts = new Date(entry.timestamp)
+            const time = `[${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}:${String(ts.getSeconds()).padStart(2,'0')}]`
+            return (
+              <div key={i} className={`log-entry ${entry.type}`}>
+                {entry.type !== 'stderr'
+                  ? <><span style={{ color: 'var(--text-muted)' }}>{time} </span>{entry.data}</>
+                  : entry.data
+                }
+              </div>
+            )
+          })
         )}
         <div ref={bottomRef} />
       </div>

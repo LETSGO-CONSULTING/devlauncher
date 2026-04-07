@@ -4,7 +4,7 @@
   "description": "Desktop app to manage and launch local dev projects",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"nodemon --exec \\\"electron .\\\" --watch dist-electron --ext js\"",
+    "dev": "vite",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build": "npm run build:renderer && npm run build:electron",

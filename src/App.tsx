@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { LogViewer } from './components/LogViewer'
 import { ProjectGroup } from './components/ProjectGroup'
+import { Dashboard } from './components/Dashboard'
 import { ProjectGroup as ProjectGroupType } from './types'
 
 declare global {
@@ -24,7 +25,7 @@ declare global {
 
 export default function App() {
   const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, setSelectedLog, selectedLog } = useStore()
-  const [sidebarTab, setSidebarTab] = useState('dashboard')
+  const [sidebarTab, setSidebarTab] = useState<'dashboard' | 'projects' | 'console'>('dashboard')
   const [topbarTab, setTopbarTab]   = useState('Cluster')
   const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
 
@@ -66,50 +67,77 @@ export default function App() {
         onAddProject={handleAdd}
         onRemove={handleRemove}
         activeTab={sidebarTab}
-        onTabChange={setSidebarTab}
+        onTabChange={(tab) => setSidebarTab(tab as 'dashboard' | 'projects' | 'console')}
       />
 
       <div className="main-area">
-        <TopBar activeTab={topbarTab} onTabChange={setTopbarTab} />
 
-        <div className="workspace">
-          {/* Workspace header */}
-          <div className="workspace-header">
-            <div>
-              <div className="workspace-title">Workspace</div>
-              <div className="workspace-subtitle">Active development environment cluster</div>
-            </div>
-            <div className="view-toggle">
-              <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>⊞</button>
-              <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>≡</button>
-            </div>
-          </div>
+        {/* ── Dashboard tab ─────────────────────────────────────────── */}
+        {sidebarTab === 'dashboard' && (
+          <Dashboard
+            groups={groups}
+            onAddProject={handleAdd}
+            onViewProjects={() => setSidebarTab('projects')}
+          />
+        )}
 
-          {/* Cards */}
-          {groups.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">🚀</div>
-              <div className="empty-state-title">No projects yet</div>
-              <div className="empty-state-desc">
-                Add a project folder or a workspace folder containing multiple projects
+        {/* ── Projects tab ──────────────────────────────────────────── */}
+        {sidebarTab === 'projects' && (
+          <>
+            <TopBar activeTab={topbarTab} onTabChange={setTopbarTab} />
+            <div className="workspace">
+              <div className="workspace-header">
+                <div>
+                  <div className="workspace-title">Workspace</div>
+                  <div className="workspace-subtitle">Active development environment cluster</div>
+                </div>
+                <div className="view-toggle">
+                  <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>⊞</button>
+                  <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>≡</button>
+                </div>
               </div>
-              <button className="empty-state-btn" onClick={handleAdd}>
-                + New Project
-              </button>
-            </div>
-          ) : (
-            <div className={viewMode === 'grid' ? 'cards-grid' : ''} style={viewMode === 'list' ? { display: 'flex', flexDirection: 'column', gap: 12 } : {}}>
-              {groups.map((g) => (
-                <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} />
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Debug console */}
-        {selectedLog && (
+              {groups.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-icon">🚀</div>
+                  <div className="empty-state-title">No projects yet</div>
+                  <div className="empty-state-desc">
+                    Add a project folder or a workspace folder containing multiple projects
+                  </div>
+                  <button className="empty-state-btn" onClick={handleAdd}>+ New Project</button>
+                </div>
+              ) : (
+                <div className={viewMode === 'grid' ? 'cards-grid' : ''}
+                  style={viewMode === 'list' ? { display: 'flex', flexDirection: 'column', gap: 12 } : {}}>
+                  {groups.map((g) => (
+                    <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Console tab ───────────────────────────────────────────── */}
+        {sidebarTab === 'console' && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {selectedLog ? (
+              <LogViewer processKey={selectedLog} onClose={() => setSelectedLog(null)} />
+            ) : (
+              <div className="empty-state">
+                <div className="empty-state-icon">⬛</div>
+                <div className="empty-state-title">No active console</div>
+                <div className="empty-state-desc">Run a script and click LOGS to open the debug console here.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Log console overlay — always available in dashboard/projects tabs */}
+        {sidebarTab !== 'console' && selectedLog && (
           <LogViewer processKey={selectedLog} onClose={() => setSelectedLog(null)} />
         )}
+
       </div>
     </div>
   )

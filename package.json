@@ -31,7 +31,11 @@
       "dist-electron/**/*"
     ]
   },
-  "keywords": ["electron", "developer-tools", "project-manager"],
+  "keywords": [
+    "electron",
+    "developer-tools",
+    "project-manager"
+  ],
   "author": "LETSGO-CONSULTING",
   "license": "MIT",
   "devDependencies": {
@@ -49,6 +53,9 @@
     "vite-plugin-electron-renderer": "^0.14.0"
   },
   "dependencies": {
+    "@iconify-json/devicon": "^1.2.62",
+    "@iconify-json/logos": "^1.2.11",
+    "@iconify/react": "^6.0.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zustand": "^4.4.0"

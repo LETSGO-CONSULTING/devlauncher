@@ -6,13 +6,53 @@ import * as os from 'os'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type ProjectType = 'npm' | 'maven' | 'gradle'
+type Framework =
+  | 'react' | 'nextjs' | 'angular' | 'vue' | 'nuxt'
+  | 'svelte' | 'astro' | 'nestjs' | 'express' | 'fastify'
+  | 'vite' | 'electron' | 'spring' | 'node'
+  | 'typescript' | 'javascript'
 
 interface ScannedProject {
   id: string
   name: string
   path: string
-  scripts: Record<string, string>   // key = display name, value = full shell command
+  scripts: Record<string, string>
   projectType: ProjectType
+  frameworks: Framework[]
+}
+
+// ─── Framework detector (npm) ──────────────────────────────────────────────
+// Order matters — more specific frameworks first
+const FRAMEWORK_DEPS: Array<{ key: string; dep: string | string[]; fw: Framework }> = [
+  { key: 'nextjs',    dep: 'next',                        fw: 'nextjs'    },
+  { key: 'nuxt',      dep: ['nuxt', 'nuxt3'],             fw: 'nuxt'      },
+  { key: 'nestjs',    dep: '@nestjs/core',                fw: 'nestjs'    },
+  { key: 'angular',   dep: '@angular/core',               fw: 'angular'   },
+  { key: 'react',     dep: 'react',                       fw: 'react'     },
+  { key: 'vue',       dep: 'vue',                         fw: 'vue'       },
+  { key: 'svelte',    dep: 'svelte',                      fw: 'svelte'    },
+  { key: 'astro',     dep: 'astro',                       fw: 'astro'     },
+  { key: 'electron',  dep: 'electron',                    fw: 'electron'  },
+  { key: 'vite',      dep: 'vite',                        fw: 'vite'      },
+  { key: 'fastify',   dep: 'fastify',                     fw: 'fastify'   },
+  { key: 'express',   dep: 'express',                     fw: 'express'   },
+]
+
+function detectNpmFrameworks(pkg: Record<string, unknown>): Framework[] {
+  const allDeps = {
+    ...((pkg.dependencies    as Record<string, string>) ?? {}),
+    ...((pkg.devDependencies as Record<string, string>) ?? {}),
+  }
+  const found: Framework[] = []
+  for (const { dep, fw } of FRAMEWORK_DEPS) {
+    const deps = Array.isArray(dep) ? dep : [dep]
+    if (deps.some(d => d in allDeps)) found.push(fw)
+  }
+  // Always add typescript/javascript based on tsconfig or scripts
+  const hasTsConfig = false // checked separately
+  if ('typescript' in allDeps) found.push('typescript')
+  if (found.length === 0) found.push('node')
+  return found
 }
 
 interface StoredGroup {
@@ -51,7 +91,6 @@ function readNpm(folderPath: string): ScannedProject | null {
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
     const rawScripts: Record<string, string> = pkg.scripts || {}
-    // Convert to full commands
     const scripts: Record<string, string> = {}
     for (const key of Object.keys(rawScripts)) {
       scripts[key] = `npm run ${key}`
@@ -62,6 +101,7 @@ function readNpm(folderPath: string): ScannedProject | null {
       path: folderPath,
       scripts,
       projectType: 'npm',
+      frameworks: detectNpmFrameworks(pkg),
     }
   } catch { return null }
 }
@@ -89,7 +129,7 @@ function readMaven(folderPath: string): ScannedProject | null {
       'clean':           `${runner} clean`,
     }
 
-    return { id: uid(), name, path: folderPath, scripts, projectType: 'maven' }
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'maven', frameworks: ['spring'] }
   } catch { return null }
 }
 
@@ -124,7 +164,7 @@ function readGradle(folderPath: string): ScannedProject | null {
       'jar':       `${runner} jar`,
     }
 
-    return { id: uid(), name, path: folderPath, scripts, projectType: 'gradle' }
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'gradle', frameworks: ['spring'] }
   } catch { return null }
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useStore } from '../store'
-import { ProjectGroup } from '../types'
+import { ProjectGroup, Framework } from '../types'
+import { TechIcon, TechIconStack, FRAMEWORK_COLOR } from './TechIcon'
 
 interface Props {
   groups: ProjectGroup[]
@@ -297,7 +298,9 @@ export function Dashboard({ groups, onAddProject, onViewProjects }: Props) {
             </div>
           ) : (
             groups.slice(0, 5).map((group) => {
-              const color   = groupColor(group.id)
+              const primaryFw: Framework | undefined = group.projects.flatMap(p => p.frameworks ?? []).find(Boolean)
+              const allFws: Framework[]              = [...new Set(group.projects.flatMap(p => p.frameworks ?? []))]
+              const accentColor = primaryFw ? FRAMEWORK_COLOR[primaryFw] : groupColor(group.id)
               const running = group.projects.some(p =>
                 Object.keys(p.scripts).some(s => statuses[`${p.id}:${s}`] === 'running')
               )
@@ -307,9 +310,14 @@ export function Dashboard({ groups, onAddProject, onViewProjects }: Props) {
 
               return (
                 <div key={group.id} className="pinned-project-row" onClick={onViewProjects}>
-                  <div className="pp-icon" style={{ background: `${color}22`, border: `1px solid ${color}44` }}>
-                    {getIcon(group.name)}
+                  {/* Primary tech icon */}
+                  <div className="pp-icon" style={{ background: `${accentColor}18`, border: `1px solid ${accentColor}33` }}>
+                    {primaryFw
+                      ? <TechIcon framework={primaryFw} size={22} />
+                      : <span style={{ fontSize: 18 }}>{getIcon(group.name)}</span>
+                    }
                   </div>
+
                   <div className="pp-info">
                     <div className="pp-name">{group.name}</div>
                     <div className="pp-meta">
@@ -319,8 +327,11 @@ export function Dashboard({ groups, onAddProject, onViewProjects }: Props) {
                       <span className="pp-tag">{group.projects.length} services</span>
                     </div>
                   </div>
+
                   <div className="pp-actions">
-                    <MiniChart seed={group.id} color={running ? color : '#334155'} />
+                    {/* Framework icon stack */}
+                    {allFws.length > 0 && <TechIconStack frameworks={allFws} size={16} />}
+                    <MiniChart seed={group.id} color={running ? accentColor : '#334155'} />
                     <button className="pp-menu-btn">⋮</button>
                   </div>
                 </div>

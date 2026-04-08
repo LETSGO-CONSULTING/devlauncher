@@ -1,5 +1,6 @@
-import { ProjectGroup } from '../types'
+import { ProjectGroup, Framework } from '../types'
 import { useStore } from '../store'
+import { TechIcon, FRAMEWORK_COLOR } from './TechIcon'
 
 interface Props {
   groups: ProjectGroup[]
@@ -8,11 +9,6 @@ interface Props {
   activeTab: string
   onTabChange: (tab: string) => void
 }
-
-const GROUP_COLORS = [
-  '#7c5cfc', '#22d3ee', '#22c55e', '#f59e0b',
-  '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6',
-]
 
 export function Sidebar({ groups, onAddProject, activeTab, onTabChange }: Props) {
   const { expanded, toggleExpanded, statuses } = useStore()
@@ -56,28 +52,40 @@ export function Sidebar({ groups, onAddProject, activeTab, onTabChange }: Props)
       {/* Recent projects */}
       <div className="sidebar-section-label">Recent Projects</div>
       <div className="sidebar-projects">
-        {groups.map((g, i) => {
-          const color = GROUP_COLORS[i % GROUP_COLORS.length]
+        {groups.map((g) => {
+          const primaryFw: Framework | undefined = g.projects.flatMap(p => p.frameworks ?? []).find(Boolean)
+          const accentColor = primaryFw ? FRAMEWORK_COLOR[primaryFw] : '#7c5cfc'
           const running = isRunning(g)
+
           return (
             <div key={g.id} className="sidebar-group">
-              <div
-                className="sidebar-group-row"
-                onClick={() => toggleExpanded(g.id)}
-              >
+              <div className="sidebar-group-row" onClick={() => toggleExpanded(g.id)}>
+                {/* Running dot */}
                 <span
                   className="sidebar-group-dot"
                   style={{ background: running ? '#22c55e' : '#334155' }}
                 />
-                <span className="sidebar-group-name" style={{ color }} title={g.path}>
+                {/* Tech icon */}
+                {primaryFw
+                  ? <TechIcon framework={primaryFw} size={14} />
+                  : <span style={{ width: 14, height: 14, display: 'inline-block' }} />
+                }
+                <span className="sidebar-group-name" style={{ color: accentColor }} title={g.path}>
                   {g.name.toUpperCase()}
                 </span>
               </div>
-              {expanded[g.id] && g.projects.map((p) => (
-                <div key={p.id} className="sidebar-project-item" title={p.path}>
-                  {p.name}
-                </div>
-              ))}
+
+              {expanded[g.id] && g.projects.map((p) => {
+                const pFw = p.frameworks?.[0]
+                const pColor = pFw ? FRAMEWORK_COLOR[pFw] : '#475569'
+                return (
+                  <div key={p.id} className="sidebar-project-item" title={p.path}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {pFw && <TechIcon framework={pFw} size={11} />}
+                    <span style={{ color: pColor, opacity: 0.8 }}>{p.name}</span>
+                  </div>
+                )
+              })}
             </div>
           )
         })}

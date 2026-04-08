@@ -1,5 +1,6 @@
 import { Project, ProcessStatus, ProjectType } from '../types'
 import { useStore } from '../store'
+import { TechIcon, FRAMEWORK_COLOR, FRAMEWORK_LABEL } from './TechIcon'
 
 interface Props {
   project: Project
@@ -98,14 +99,32 @@ export function ProjectCard({ project }: Props) {
     )
   }
 
+  // Primary framework icon + color
+  const primaryFw = (project.frameworks ?? [])[0]
+  const prefixColor = primaryFw ? FRAMEWORK_COLOR[primaryFw] : meta.prefixColor
+
   return (
     <>
-      {/* Project type badge inside card */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 20px 4px', opacity: 0.6 }}>
-        <span style={{ fontSize: 12 }}>{meta.icon}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: meta.prefixColor }}>
-          {meta.label}
-        </span>
+      {/* Tech badges row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 20px 4px' }}>
+        {(project.frameworks ?? []).length > 0
+          ? (project.frameworks ?? []).map(fw => (
+              <span key={fw} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <TechIcon framework={fw} size={14} />
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: FRAMEWORK_COLOR[fw], opacity: 0.85 }}>
+                  {FRAMEWORK_LABEL[fw]}
+                </span>
+              </span>
+            ))
+          : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0.6 }}>
+                <span style={{ fontSize: 12 }}>{meta.icon}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: meta.prefixColor }}>
+                  {meta.label}
+                </span>
+              </span>
+            )
+        }
       </div>
 
       {scripts.map((scriptKey) => {
@@ -121,7 +140,7 @@ export function ProjectCard({ project }: Props) {
         return (
           <div key={scriptKey} className={`script-row ${isSelected ? 'selected' : ''}`}>
             <span className="script-name">
-              <span className="script-npm" style={{ color: meta.prefixColor }}>{prefix}</span>
+              <span className="script-npm" style={{ color: prefixColor }}>{prefix}</span>
               <span className="script-cmd"> {cmd}</span>
             </span>
 

@@ -66,11 +66,49 @@ interface StoredGroup {
 const CONFIG_DIR  = path.join(os.homedir(), '.devlauncher')
 const CONFIG_FILE = path.join(CONFIG_DIR, 'groups.json')
 
+// Re-detect frameworks for a project that is missing the field
+function migrateProject(p: ScannedProject): ScannedProject {
+  if (p.frameworks && p.frameworks.length > 0) return p   // already detected
+
+  if (p.projectType === 'maven' || p.projectType === 'gradle') {
+    return { ...p, frameworks: ['spring'] }
+  }
+
+  // npm — read package.json again
+  const pkgPath = path.join(p.path, 'package.json')
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+      return { ...p, frameworks: detectNpmFrameworks(pkg) }
+    } catch { /* ignore */ }
+  }
+  return { ...p, frameworks: ['node'] }
+}
+
 function loadGroups(): StoredGroup[] {
   try {
     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
     if (!fs.existsSync(CONFIG_FILE)) return []
-    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'))
+    const groups: StoredGroup[] = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'))
+
+    // Migration: fill in missing frameworks and save back
+    let dirty = false
+    const migrated = groups.map(g => ({
+      ...g,
+      projects: g.projects.map(p => {
+        if (!p.frameworks || p.frameworks.length === 0) {
+          dirty = true
+          return migrateProject(p)
+        }
+        return p
+      }),
+    }))
+
+    if (dirty) {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(migrated, null, 2))
+    }
+
+    return migrated
   } catch { return [] }
 }
 

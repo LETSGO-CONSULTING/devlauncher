@@ -8,116 +8,237 @@ interface Props {
 
 // ─── ANSI stripper ────────────────────────────────────────────────────────
 function stripAnsi(str: string): string {
-  return str.replace(/[\x1B\x9B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, '')
+  return str.replace(
+    /[\x1B\x9B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g,
+    ''
+  )
 }
 
-// ─── Token colors ─────────────────────────────────────────────────────────
-interface Segment {
+// ─── IntelliJ-accurate colors ─────────────────────────────────────────────
+// Match exactly how IntelliJ IDEA renders log levels
+const LEVEL_STYLES: Record<string, { color: string; bg?: string; bold?: boolean }> = {
+  ERROR:     { color: '#FF6B68', bg: 'rgba(255,107,104,0.08)', bold: true },
+  FATAL:     { color: '#FF6B68', bg: 'rgba(255,107,104,0.08)', bold: true },
+  EXCEPTION: { color: '#FF6B68', bold: true },
+  SEVERE:    { color: '#FF6B68', bold: true },
+  WARN:      { color: '#BBB529', bold: true },
+  WARNING:   { color: '#BBB529', bold: true },
+  INFO:      { color: '#6A9153', bold: false },
+  DEBUG:     { color: '#6897BB', bold: false },
+  TRACE:     { color: '#6B6B6B', bold: false },
+  VERBOSE:   { color: '#6B6B6B', bold: false },
+}
+
+// IntelliJ dark theme palette
+const C = {
+  timestamp:    '#6B7280',   // muted gray — same as IntelliJ datetime
+  pid:          '#808080',   // process ID
+  separator:    '#4B5563',   // --- dashes
+  bracket:      '#6B7280',   // [thread] [context]
+  bracketInner: '#9E9E9E',   // text inside brackets
+  logger:       '#6897BB',   // abbreviated class name (o.s.b.w...)
+  loggerFull:   '#6897BB',   // full class name
+  message:      '#BBBBBB',   // default message text — IntelliJ light gray
+  string:       '#6A8759',   // "quoted strings"
+  number:       '#6897BB',   // numbers
+  port:         '#6897BB',   // port numbers
+  url:          '#287BDE',   // http://...
+  httpMethod:   '#CC7832',   // GET POST PUT
+  status2xx:    '#6A9153',   // 200 OK
+  status3xx:    '#6897BB',   // 301
+  status4xx:    '#BBB529',   // 404
+  status5xx:    '#FF6B68',   // 500
+  duration:     '#6A9153',   // 123ms 4.5s
+  stackAt:      '#9E9E9E',   // at com.foo.Bar(...)
+  stackFile:    '#6897BB',   // Foo.java:42
+  keyword:      '#CC7832',   // true false null
+  highlight:    '#FFFFFF',   // important values (port number, app name on start)
+}
+
+// ─── Segment ──────────────────────────────────────────────────────────────
+interface Seg {
   text: string
   color: string
+  bg?: string
   bold?: boolean
   italic?: boolean
+  underline?: boolean
   dim?: boolean
 }
 
-/**
- * Single-pass regex tokenizer — processes each line left to right,
- * matching the first rule that applies at each position.
- *
- * Groups (in order):
- * 1  ERROR / FATAL / EXCEPTION / SEVERE
- * 2  WARN / WARNING
- * 3  INFO / INFORMATION / STARTED / STARTED
- * 4  DEBUG
- * 5  TRACE
- * 6  HTTP methods
- * 7  2xx status
- * 8  3xx status
- * 9  4xx status
- * 10 5xx status
- * 11 ISO / full datetime
- * 12 HH:MM:SS time only
- * 13 URLs
- * 14 Quoted strings "..."
- * 15 Stack-trace line  (at com.foo.Bar...)
- * 16 Brackets [NestJS / Spring context tags]
- * 17 Numeric durations  (e.g. 123ms, 4.5s)
- * 18 Port numbers / standalone numbers
- */
-const TOKEN_REGEX =
-  /(\b(?:ERROR|FATAL|EXCEPTION|SEVERE)\b)|(\b(?:WARN(?:ING)?)\b)|(\b(?:INFO(?:RMATION)?|STARTED|MAPPED)\b)|(\bDEBUG\b)|(\bTRACE\b)|\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b|\b(2\d{2})\b|\b(3\d{2})\b|\b(4\d{2})\b|\b(5\d{2})\b|(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)| (\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)|(https?:\/\/\S+)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(^\s*at\s+[\w$./\-<>()[\]:, ]+)|\[([^\]]+)\]|(\d+(?:\.\d+)?(?:ms|s|MB|KB|GB)\b)|(\d+)/gim
-
-function colorizeLine(raw: string): Segment[] {
-  const line = stripAnsi(raw)
-  const segments: Segment[] = []
-  let lastIndex = 0
-
-  TOKEN_REGEX.lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = TOKEN_REGEX.exec(line)) !== null) {
-    // Text before this match → default color
-    if (match.index > lastIndex) {
-      segments.push({ text: line.slice(lastIndex, match.index), color: '#94a3b8' })
-    }
-
-    const full = match[0]
-    const [
-      , g1Error, g2Warn, g3Info, g4Debug, g5Trace,
-      g6Http,
-      g7s2xx, g8s3xx, g9s4xx, g10s5xx,
-      g11DateTime, g12Time,
-      g13Url,
-      g14Quoted,
-      g15Stack,
-      g16Bracket,
-      g17Duration,
-      g18Number,
-    ] = match
-
-    if      (g1Error)    segments.push({ text: full, color: '#ff5f57', bold: true })
-    else if (g2Warn)     segments.push({ text: full, color: '#fbbf24', bold: true })
-    else if (g3Info)     segments.push({ text: full, color: '#4ade80', bold: true })
-    else if (g4Debug)    segments.push({ text: full, color: '#60a5fa' })
-    else if (g5Trace)    segments.push({ text: full, color: '#64748b', dim: true })
-    else if (g6Http)     segments.push({ text: full, color: '#38bdf8', bold: true })
-    else if (g7s2xx)     segments.push({ text: full, color: '#4ade80', bold: true })
-    else if (g8s3xx)     segments.push({ text: full, color: '#38bdf8' })
-    else if (g9s4xx)     segments.push({ text: full, color: '#fbbf24', bold: true })
-    else if (g10s5xx)    segments.push({ text: full, color: '#ff5f57', bold: true })
-    else if (g11DateTime)segments.push({ text: full, color: '#475569' })
-    else if (g12Time)    segments.push({ text: full, color: '#475569' })
-    else if (g13Url)     segments.push({ text: full, color: '#38bdf8', italic: true })
-    else if (g14Quoted)  segments.push({ text: full, color: '#fde68a' })
-    else if (g15Stack)   segments.push({ text: full, color: '#f97316', dim: true })
-    else if (g16Bracket) segments.push({ text: `[${g16Bracket}]`, color: '#c084fc' })
-    else if (g17Duration)segments.push({ text: full, color: '#34d399' })
-    else if (g18Number)  segments.push({ text: full, color: '#c084fc' })
-    else                 segments.push({ text: full, color: '#94a3b8' })
-
-    lastIndex = match.index + full.length
-  }
-
-  if (lastIndex < line.length) {
-    segments.push({ text: line.slice(lastIndex), color: '#94a3b8' })
-  }
-
-  return segments
+function seg(text: string, color: string, opts?: Partial<Omit<Seg, 'text' | 'color'>>): Seg {
+  return { text, color, ...opts }
 }
 
+// ─── Spring Boot / NestJS structured log parser ───────────────────────────
+//
+// Spring Boot format:
+//   2026-04-07T11:28:22.496-05:00  INFO 68860 --- [app] [main] c.e.MyClass : message
+//
+// NestJS format:
+//   [Nest] 12345  - 04/07/2026, 11:28:22 AM     LOG [NestApplication] message
+//
+const SPRING_RE =
+  /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)(\s+)(ERROR|FATAL|WARN|INFO|DEBUG|TRACE)(\s+)(\d+)(\s+)(---|\.\.\.)(\s+)(\[[^\]]*\])(\s+)(\[[^\]]*\])?(\s*)([\w.$][\w.$/:]*)?(\s*:\s*)(.*)/
+
+const NEST_RE =
+  /^(\[Nest\]|\[NestApplication\]|\[NestFactory\]|\[RoutesResolver\]|\[RouterExplorer\]|\[InstanceLoader\])(\s+)(\d+)(\s+-\s+)(.+?)(LOG|ERROR|WARN|DEBUG|VERBOSE)(\s+)(\[[^\]]+\])(\s*)(.*)/
+
+function parseSpringBoot(line: string): Seg[] | null {
+  const m = SPRING_RE.exec(line)
+  if (!m) return null
+
+  const [, ts, sp1, level, sp2, pid, sp3, sep, sp4, ctx1, sp5, ctx2, sp6, logger, colon, message] = m
+  const ls = LEVEL_STYLES[level] ?? { color: C.message }
+
+  const segs: Seg[] = []
+
+  // Timestamp
+  segs.push(seg(ts, C.timestamp))
+  segs.push(seg(sp1, C.separator))
+
+  // Level — padded, with optional bg highlight on ERROR/WARN
+  segs.push(seg(level.padEnd(5), ls.color, { bold: ls.bold, bg: ls.bg }))
+  segs.push(seg(sp2, C.separator))
+
+  // PID
+  segs.push(seg(pid, C.pid))
+  segs.push(seg(sp3, C.separator))
+
+  // --- separator
+  segs.push(seg(sep, C.separator))
+  segs.push(seg(sp4, C.separator))
+
+  // [thread/app context]
+  if (ctx1) segs.push(seg(ctx1, C.bracketInner))
+  if (sp5)  segs.push(seg(sp5, C.separator))
+  if (ctx2) segs.push(seg(ctx2, C.bracketInner))
+  if (sp6)  segs.push(seg(sp6, C.separator))
+
+  // Logger class — abbreviated like o.s.b.w.EmbeddedWebServer
+  if (logger) segs.push(seg(logger, C.logger))
+
+  // Colon separator
+  if (colon) segs.push(seg(colon, C.separator))
+
+  // Message — colorize inline
+  if (message) segs.push(...colorizeMessage(message, level))
+
+  return segs
+}
+
+function parseNest(line: string): Seg[] | null {
+  const m = NEST_RE.exec(line)
+  if (!m) return null
+  const [, ctx, sp1, pid, dash, rest, level, sp2, module, sp3, message] = m
+  const ls = LEVEL_STYLES[level] ?? { color: C.message }
+  return [
+    seg(ctx, '#A9B7C6'),
+    seg(sp1 + pid, C.pid),
+    seg(dash + rest, C.timestamp),
+    seg(level, ls.color, { bold: ls.bold }),
+    seg(sp2, C.separator),
+    seg(module, C.bracketInner),
+    seg(sp3, C.separator),
+    ...colorizeMessage(message, level),
+  ]
+}
+
+// ─── Message-level tokenizer ──────────────────────────────────────────────
+// Applied to the message part after the logger colon, or full line if no structured format
+const MSG_RE = new RegExp([
+  // Stack trace line
+  /^(\s*at\s+[\w$.<>[\]]+\([\w$.:/\\-]+(?::\d+)?\))/.source,
+  // "Caused by:"
+  /(Caused by:[^\n]*)/.source,
+  // HTTP methods
+  /\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b/.source,
+  // HTTP status codes
+  /\b(2\d{2}|3\d{2}|4\d{2}|5\d{2})\b/.source,
+  // URLs
+  /(https?:\/\/[^\s,)]+)/.source,
+  // Quoted strings
+  /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/.source,
+  // Duration / size
+  /\b(\d+(?:\.\d+)?(?:ms|s|ns|MB|KB|GB))\b/.source,
+  // Port  "on port 8080"
+  /\bon\s+port\s+(\d+)/.source,
+  // Boolean / null keywords
+  /\b(true|false|null|undefined|NaN|Infinity)\b/.source,
+  // Numbers (standalone, not part of words)
+  /(?<!\w)(\d+(?:\.\d+)?)(?!\w)/.source,
+].join('|'), 'gim')
+
+function colorizeMessage(msg: string, level: string): Seg[] {
+  const baseColor = LEVEL_STYLES[level]?.color ?? C.message
+
+  // For ERROR/FATAL lines, the whole message gets a tint
+  const defaultColor = (level === 'ERROR' || level === 'FATAL')
+    ? '#E06C6C'
+    : level === 'WARN'
+    ? '#C4A84F'
+    : C.message
+
+  const segs: Seg[] = []
+  let last = 0
+  MSG_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+
+  while ((m = MSG_RE.exec(msg)) !== null) {
+    if (m.index > last) segs.push(seg(msg.slice(last, m.index), defaultColor))
+
+    const [full, stack, causedBy, http, status, url, quoted, duration, port, keyword, num] = m
+
+    if      (stack)    segs.push(seg(full, C.stackAt, { dim: true }))
+    else if (causedBy) segs.push(seg(full, '#FF6B68', { bold: true }))
+    else if (http)     segs.push(seg(full, C.httpMethod, { bold: true }))
+    else if (status) {
+      const s = parseInt(status)
+      const c = s < 300 ? C.status2xx : s < 400 ? C.status3xx : s < 500 ? C.status4xx : C.status5xx
+      segs.push(seg(full, c, { bold: true }))
+    }
+    else if (url)      segs.push(seg(full, C.url, { italic: true }))
+    else if (quoted)   segs.push(seg(full, C.string))
+    else if (duration) segs.push(seg(full, C.duration))
+    else if (port)     segs.push(seg('on port ', defaultColor), seg(port, C.highlight, { bold: true }))
+    else if (keyword)  segs.push(seg(full, C.keyword))
+    else if (num)      segs.push(seg(full, C.number))
+    else               segs.push(seg(full, defaultColor))
+
+    last = m.index + full.length
+  }
+
+  if (last < msg.length) segs.push(seg(msg.slice(last), defaultColor))
+  return segs
+}
+
+// ─── Generic fallback — line-level detection ──────────────────────────────
+function colorizeFallback(line: string): Seg[] {
+  // Try to detect level anywhere in the line
+  let detectedLevel = ''
+  for (const lvl of ['ERROR', 'FATAL', 'WARN', 'INFO', 'DEBUG', 'TRACE']) {
+    if (new RegExp(`\\b${lvl}\\b`, 'i').test(line)) { detectedLevel = lvl; break }
+  }
+  return colorizeMessage(line, detectedLevel)
+}
+
+// ─── Main line renderer ───────────────────────────────────────────────────
 function renderLine(raw: string): React.ReactNode {
-  const segments = colorizeLine(raw)
-  return segments.map((seg, i) => (
-    <span
-      key={i}
-      style={{
-        color: seg.color,
-        fontWeight: seg.bold ? '700' : undefined,
-        fontStyle: seg.italic ? 'italic' : undefined,
-        opacity: seg.dim ? 0.6 : undefined,
-      }}
-    >
-      {seg.text}
+  const line = stripAnsi(raw)
+  if (!line.trim()) return <span>&nbsp;</span>
+
+  const segs = parseSpringBoot(line) ?? parseNest(line) ?? colorizeFallback(line)
+
+  return segs.map((s, i) => (
+    <span key={i} style={{
+      color:          s.color,
+      background:     s.bg,
+      fontWeight:     s.bold   ? '600'    : undefined,
+      fontStyle:      s.italic ? 'italic' : undefined,
+      textDecoration: s.underline ? 'underline' : undefined,
+      opacity:        s.dim   ? 0.55     : undefined,
+    }}>
+      {s.text}
     </span>
   ))
 }
@@ -136,7 +257,6 @@ export function LogViewer({ processKey, onClose }: Props) {
 
   return (
     <div className="log-console">
-      {/* Console bar */}
       <div className="log-console-bar">
         <div className="traffic-lights">
           <span className="tl tl-red" />
@@ -149,27 +269,31 @@ export function LogViewer({ processKey, onClose }: Props) {
         <button className="btn-console-close" onClick={onClose}>×</button>
       </div>
 
-      {/* Log output */}
       <div className="log-output">
         {entries.length === 0 ? (
-          <span style={{ color: 'var(--text-muted)' }}>Waiting for output...</span>
+          <span style={{ color: '#4B5563' }}>Waiting for output...</span>
         ) : (
           entries.map((entry, i) => {
+            // System events (our own messages)
             if (entry.type === 'system') {
               return (
-                <div key={i} className="log-entry" style={{ color: '#f59e0b', opacity: 0.8 }}>
+                <div key={i} className="log-entry" style={{ color: '#6B7280', fontStyle: 'italic' }}>
                   {entry.data}
                 </div>
               )
             }
 
-            // Split multi-line chunks (stdout/stderr can batch multiple lines)
-            const lines = entry.data.split('\n').filter((l) => l.length > 0)
-            return lines.map((line, j) => (
-              <div key={`${i}-${j}`} className="log-entry">
-                {renderLine(line)}
-              </div>
-            ))
+            const lines = entry.data.split('\n').filter(l => l.length > 0)
+            return lines.map((line, j) => {
+              const isError = /\b(ERROR|FATAL)\b/.test(line)
+              const isWarn  = !isError && /\bWARN(ING)?\b/.test(line)
+              const cls     = `log-entry${isError ? ' is-error' : isWarn ? ' is-warn' : ''}`
+              return (
+                <div key={`${i}-${j}`} className={cls}>
+                  {renderLine(line)}
+                </div>
+              )
+            })
           })
         )}
         <div ref={bottomRef} />

@@ -19,6 +19,7 @@ const FRAMEWORK_ICON: Record<Framework, string> = {
   node:       'logos:nodejs-icon',
   typescript: 'logos:typescript-icon',
   javascript: 'logos:javascript',
+  docker:     'logos:docker-icon',
 }
 
 // ─── Native brand colors (for text/accents when needed) ───────────────────
@@ -39,6 +40,7 @@ export const FRAMEWORK_COLOR: Record<Framework, string> = {
   node:       '#339933',
   typescript: '#3178C6',
   javascript: '#F7DF1E',
+  docker:     '#2496ED',
 }
 
 export const FRAMEWORK_LABEL: Record<Framework, string> = {
@@ -58,6 +60,7 @@ export const FRAMEWORK_LABEL: Record<Framework, string> = {
   node:       'Node.js',
   typescript: 'TypeScript',
   javascript: 'JavaScript',
+  docker:     'Docker',
 }
 
 // ─── Single icon ──────────────────────────────────────────────────────────

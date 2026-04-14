@@ -3,6 +3,7 @@ import { ProjectGroup as ProjectGroupType, Framework } from '../types'
 import { useStore } from '../store'
 import { ProjectCard } from './ProjectCard'
 import { TechIcon, TechIconStack, FRAMEWORK_COLOR, FRAMEWORK_LABEL } from './TechIcon'
+import { RuntimeSelector } from './RuntimeSelector'
 
 interface Props {
   group: ProjectGroupType
@@ -10,7 +11,7 @@ interface Props {
 }
 
 export function ProjectGroup({ group, onRemove }: Props) {
-  const { statuses } = useStore()
+  const { statuses, runtimeVersions, setRuntimeVersion } = useStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
 
@@ -126,6 +127,16 @@ export function ProjectGroup({ group, onRemove }: Props) {
               )}
             </div>
 
+            {isOpen && (
+              <div style={{ padding: '8px 20px 4px', borderTop: '1px solid rgba(30,45,61,0.4)' }}>
+                <RuntimeSelector
+                  projectType={project.projectType}
+                  selectedNode={runtimeVersions[project.id]?.node}
+                  selectedJava={runtimeVersions[project.id]?.java}
+                  onChange={(node, java) => setRuntimeVersion(project.id, node, java)}
+                />
+              </div>
+            )}
             {isOpen && <ProjectCard project={project} />}
           </div>
         )

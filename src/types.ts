@@ -1,10 +1,11 @@
-export type ProjectType = 'npm' | 'maven' | 'gradle'
+export type ProjectType = 'npm' | 'maven' | 'gradle' | 'docker'
 
 export type Framework =
   | 'react'   | 'nextjs'   | 'angular'  | 'vue'      | 'nuxt'
   | 'svelte'  | 'astro'    | 'nestjs'   | 'express'  | 'fastify'
   | 'vite'    | 'electron' | 'spring'   | 'node'
   | 'typescript' | 'javascript'
+  | 'docker'
 
 export interface Project {
   id: string
@@ -12,7 +13,9 @@ export interface Project {
   path: string
   scripts: Record<string, string>
   projectType: ProjectType
-  frameworks: Framework[]   // detected from dependencies, ordered by relevance
+  frameworks: Framework[]
+  nodeVersion?: string   // e.g. "18.20.0" — selected by user, empty = system default
+  javaVersion?: string   // e.g. "17.0.13" — selected by user, empty = system default
 }
 
 export interface ProjectGroup {
@@ -25,7 +28,7 @@ export interface ProjectGroup {
 export type ProcessStatus = 'stopped' | 'running' | 'error'
 
 export interface LogEntry {
-  type: 'stdout' | 'stderr' | 'system'
+  type: 'stdout' | 'stderr' | 'system' | 'stdin'
   data: string
   timestamp: number
 }

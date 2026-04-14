@@ -3,10 +3,19 @@ import { ProjectGroup, ProcessStatus, LogEntry } from './types'
 
 interface AppState {
   groups: ProjectGroup[]
-  expanded: Record<string, boolean>          // groupId → open/closed
-  statuses: Record<string, ProcessStatus>    // `${projectId}:${script}`
-  logs: Record<string, LogEntry[]>           // `${projectId}:${script}`
-  selectedLog: string | null
+  expanded: Record<string, boolean>
+  statuses: Record<string, ProcessStatus>
+  logs: Record<string, LogEntry[]>
+  openLogs: string[]       // all open console tabs (ordered)
+  activeLog: string | null // which tab is focused
+  // runtime versions per project: projectId → { node, java }
+  runtimeVersions: Record<string, { node?: string; java?: string }>
+  // real OS PIDs — key → pid (retained even after process exits for history display)
+  processPids: Record<string, number>
+  // total log lines received per key (never resets, used for chart sampling)
+  logCounts: Record<string, number>
+  // human-readable labels for infra log keys (docker / k8s)
+  logLabels: Record<string, { name: string; script: string }>
 
   setGroups: (groups: ProjectGroup[]) => void
   addGroup: (group: ProjectGroup) => void
@@ -15,7 +24,12 @@ interface AppState {
   setStatus: (key: string, status: ProcessStatus) => void
   appendLog: (key: string, entry: LogEntry) => void
   clearLog: (key: string) => void
-  setSelectedLog: (key: string | null) => void
+  openLog: (key: string) => void        // open or focus a console tab
+  closeLog: (key: string) => void       // close a console tab
+  setActiveLog: (key: string | null) => void  // switch active tab
+  setRuntimeVersion: (projectId: string, node?: string, java?: string) => void
+  setPid: (key: string, pid: number) => void
+  setLogLabel: (key: string, label: { name: string; script: string }) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -23,7 +37,12 @@ export const useStore = create<AppState>((set) => ({
   expanded: {},
   statuses: {},
   logs: {},
-  selectedLog: null,
+  openLogs: [],
+  activeLog: null,
+  runtimeVersions: {},
+  processPids: {},
+  logCounts: {},
+  logLabels: {},
 
   setGroups: (groups) => set({ groups }),
 
@@ -46,11 +65,45 @@ export const useStore = create<AppState>((set) => ({
     set((s) => {
       const prev = s.logs[key] ?? []
       const next = prev.length >= 2000 ? [...prev.slice(-1999), entry] : [...prev, entry]
-      return { logs: { ...s.logs, [key]: next } }
+      return {
+        logs: { ...s.logs, [key]: next },
+        logCounts: { ...s.logCounts, [key]: (s.logCounts[key] ?? 0) + 1 },
+      }
     }),
 
   clearLog: (key) =>
     set((s) => ({ logs: { ...s.logs, [key]: [] } })),
 
-  setSelectedLog: (key) => set({ selectedLog: key }),
+  openLog: (key) =>
+    set((s) => ({
+      openLogs: s.openLogs.includes(key) ? s.openLogs : [...s.openLogs, key],
+      activeLog: key,
+    })),
+
+  closeLog: (key) =>
+    set((s) => {
+      const next = s.openLogs.filter((k) => k !== key)
+      let active = s.activeLog
+      if (active === key) {
+        const idx = s.openLogs.indexOf(key)
+        active = next[idx] ?? next[idx - 1] ?? null
+      }
+      return { openLogs: next, activeLog: active }
+    }),
+
+  setActiveLog: (key) => set({ activeLog: key }),
+
+  setRuntimeVersion: (projectId, node, java) =>
+    set((s) => ({
+      runtimeVersions: {
+        ...s.runtimeVersions,
+        [projectId]: { node, java },
+      },
+    })),
+
+  setPid: (key, pid) =>
+    set((s) => ({ processPids: { ...s.processPids, [key]: pid } })),
+
+  setLogLabel: (key, label) =>
+    set((s) => ({ logLabels: { ...s.logLabels, [key]: label } })),
 }))

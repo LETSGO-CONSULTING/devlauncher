@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useStore } from '../store'
 
 interface Props {
   processKey: string
+  label?: string
+  fullHeight?: boolean
   onClose: () => void
 }
 
@@ -243,20 +245,95 @@ function renderLine(raw: string): React.ReactNode {
   ))
 }
 
+// ─── Context menu ─────────────────────────────────────────────────────────
+interface CtxMenu { x: number; y: number }
+
 // ─── Component ────────────────────────────────────────────────────────────
-export function LogViewer({ processKey, onClose }: Props) {
-  const { logs, clearLog } = useStore()
+export function LogViewer({ processKey, label, fullHeight, onClose }: Props) {
+  const { logs, clearLog, statuses } = useStore()
   const entries   = logs[processKey] ?? []
   const bottomRef = useRef<HTMLDivElement>(null)
+  const topRef    = useRef<HTMLDivElement>(null)
+  const [ctx, setCtx] = useState<CtxMenu | null>(null)
+  const [inputVal, setInputVal]   = useState('')
+  const [inputErr, setInputErr]   = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Derive projectId + scriptKey from processKey
+  const colonIdx  = processKey.indexOf(':')
+  const projectId = colonIdx > -1 ? processKey.slice(0, colonIdx) : processKey
+  const scriptKey = colonIdx > -1 ? processKey.slice(colonIdx + 1) : ''
+  const isRunning = statuses[processKey] === 'running'
+
+  const sendStdin = async () => {
+    const text = inputVal
+    if (!text) return
+    setInputVal('')
+    // Echo the input into the log
+    const { appendLog } = useStore.getState()
+    appendLog(processKey, { type: 'stdin', data: text, timestamp: Date.now() })
+    const res = await window.electronAPI.sendInput(projectId, scriptKey, text + '\n')
+    if (res?.error) {
+      setInputErr(res.error)
+      setTimeout(() => setInputErr(''), 3000)
+    }
+  }
+
+  const onInputKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') sendStdin()
+    if (e.key === 'Escape') setInputVal('')
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [entries.length])
 
-  const label = processKey.toUpperCase().replace(':', ' / ')
+  // close context menu on outside click or Escape
+  useEffect(() => {
+    if (!ctx) return
+    const close = () => setCtx(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtx(null) }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', onKey) }
+  }, [ctx])
+
+  label = label ?? processKey.toUpperCase().replace(':', ' / ')
+
+  const plainText = () => entries.map((e) => e.data).join('\n')
+
+  const copyLogs = () => {
+    navigator.clipboard.writeText(plainText())
+  }
+
+  const copySelection = () => {
+    const sel = window.getSelection()?.toString()
+    if (sel) navigator.clipboard.writeText(sel)
+  }
+
+  const downloadLogs = () => {
+    const blob = new Blob([plainText()], { type: 'text/plain' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `${processKey.replace(':', '-')}.log`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setCtx({ x: e.clientX, y: e.clientY })
+  }, [])
+
+  const ctxAction = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    fn()
+    setCtx(null)
+  }
 
   return (
-    <div className="log-console">
+    <div className={`log-console${fullHeight ? ' log-console--full' : ''}`}>
       <div className="log-console-bar">
         <div className="traffic-lights">
           <span className="tl tl-red" />
@@ -265,11 +342,14 @@ export function LogViewer({ processKey, onClose }: Props) {
         </div>
         <span className="console-terminal-icon">⬛</span>
         <span className="console-label">Active Debug Console — {label}</span>
+        <button className="btn-console-clear" onClick={copyLogs} title="Copy log to clipboard">Copy</button>
+        <button className="btn-console-clear" onClick={downloadLogs} title="Download log as file">Download</button>
         <button className="btn-console-clear" onClick={() => clearLog(processKey)}>Clear</button>
         <button className="btn-console-close" onClick={onClose}>×</button>
       </div>
 
-      <div className="log-output">
+      <div className="log-output" onContextMenu={handleContextMenu}>
+        <div ref={topRef} />
         {entries.length === 0 ? (
           <span style={{ color: '#4B5563' }}>Waiting for output...</span>
         ) : (
@@ -279,6 +359,16 @@ export function LogViewer({ processKey, onClose }: Props) {
               return (
                 <div key={i} className="log-entry" style={{ color: '#6B7280', fontStyle: 'italic' }}>
                   {entry.data}
+                </div>
+              )
+            }
+
+            // stdin echo
+            if (entry.type === 'stdin') {
+              return (
+                <div key={i} className="log-entry log-entry--stdin">
+                  <span style={{ color: '#6B7280' }}>{'> '}</span>
+                  <span style={{ color: '#e2e8f0' }}>{entry.data}</span>
                 </div>
               )
             }
@@ -298,6 +388,59 @@ export function LogViewer({ processKey, onClose }: Props) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* ── stdin input bar ─────────────────────────────────────── */}
+      <div className="log-stdin-bar">
+        <span className="log-stdin-prompt">{'>'}</span>
+        <input
+          ref={inputRef}
+          className="log-stdin-input"
+          type="text"
+          placeholder={isRunning ? 'Send input to process… (Enter to send)' : 'Process not running'}
+          disabled={!isRunning}
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onKeyDown={onInputKey}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <button
+          className="log-stdin-send"
+          onClick={sendStdin}
+          disabled={!isRunning || !inputVal.trim()}
+          title="Send (Enter)"
+        >↵</button>
+        {inputErr && <span className="log-stdin-err">{inputErr}</span>}
+      </div>
+
+      {ctx && (
+        <div
+          className="ctx-menu"
+          style={{ top: ctx.y, left: ctx.x }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button className="ctx-item" onClick={ctxAction(copySelection)}>
+            <span className="ctx-icon">⎘</span> Copy selection
+          </button>
+          <button className="ctx-item" onClick={ctxAction(copyLogs)}>
+            <span className="ctx-icon">⎘</span> Copy all
+          </button>
+          <button className="ctx-item" onClick={ctxAction(downloadLogs)}>
+            <span className="ctx-icon">↓</span> Download .log
+          </button>
+          <div className="ctx-sep" />
+          <button className="ctx-item" onClick={ctxAction(() => clearLog(processKey))}>
+            <span className="ctx-icon">✕</span> Clear console
+          </button>
+          <div className="ctx-sep" />
+          <button className="ctx-item" onClick={ctxAction(() => topRef.current?.scrollIntoView({ behavior: 'smooth' }))}>
+            <span className="ctx-icon">↑</span> Scroll to top
+          </button>
+          <button className="ctx-item" onClick={ctxAction(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }))}>
+            <span className="ctx-icon">↓</span> Scroll to bottom
+          </button>
+        </div>
+      )}
     </div>
   )
 }

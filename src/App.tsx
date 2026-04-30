@@ -48,6 +48,9 @@ declare global {
       killPort: (port: number) => Promise<{ success: boolean; error?: string }>
       getProcessPids: () => Promise<Record<string, number>>
       sendInput: (projectId: string, scriptKey: string, text: string) => Promise<{ success?: boolean; error?: string }>
+      licenseGet: () => Promise<{ tier: string; expiresAt?: string | null; expired?: boolean }>
+      licenseActivate: (key: string) => Promise<{ success?: boolean; tier?: string; expiresAt?: string; error?: string }>
+      licenseDeactivate: () => Promise<{ success?: boolean; error?: string }>
       onProcessLog: (cb: (p: { key: string; data: string; type: 'stdout' | 'stderr' }) => void) => () => void
       onProcessExit: (cb: (p: { key: string; code: number | null }) => void) => () => void
       onProcessStarted: (cb: (p: { key: string; pid: number | null }) => void) => () => void
@@ -73,7 +76,7 @@ function processLabel(
 }
 
 export default function App() {
-  const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, openLog, closeLog, setActiveLog, openLogs, activeLog, setPid, logLabels } = useStore()
+  const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, openLog, closeLog, setActiveLog, openLogs, activeLog, setPid, logLabels, tier, setTier } = useStore()
   const [sidebarTab, setSidebarTab] = useState<'dashboard' | 'projects' | 'sdks' | 'infra' | 'console'>('dashboard')
   const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
   const [overlayHeight, setOverlayHeight] = useState(320)
@@ -106,6 +109,9 @@ export default function App() {
 
   useEffect(() => {
     window.electronAPI.getGroups().then(setGroups)
+    window.electronAPI.licenseGet().then((res) => {
+      if (res.tier && res.tier !== 'free') setTier(res.tier as 'pro' | 'teams', res.expiresAt ?? null)
+    })
     window.electronAPI.getRunning().then((keys) => keys.forEach((k) => setStatus(k, 'running')))
     // Hydrate PIDs for processes already running at startup (e.g. after hot-reload)
     window.electronAPI.getProcessPids().then((pids) => {
@@ -130,7 +136,7 @@ export default function App() {
   }, [groups])
 
   const handleAdd = async () => {
-    if (!canAddGroup(groups.length)) {
+    if (!canAddGroup(groups.length, tier)) {
       setShowUpgradeModal(true)
       return
     }

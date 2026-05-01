@@ -7,6 +7,8 @@ export type Framework =
   | 'typescript' | 'javascript'
   | 'docker'
 
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
+
 export interface Project {
   id: string
   name: string
@@ -14,8 +16,10 @@ export interface Project {
   scripts: Record<string, string>
   projectType: ProjectType
   frameworks: Framework[]
-  nodeVersion?: string   // e.g. "18.20.0" — selected by user, empty = system default
-  javaVersion?: string   // e.g. "17.0.13" — selected by user, empty = system default
+  packageManager?: PackageManager
+  nodeVersion?: string
+  javaVersion?: string
+  hooks?: Record<string, { pre?: string; post?: string }>
 }
 
 export interface ProjectGroup {

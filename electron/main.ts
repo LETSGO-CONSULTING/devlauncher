@@ -1,11 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
+import * as crypto from 'crypto'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type ProjectType = 'npm' | 'maven' | 'gradle' | 'docker'
+type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 type Framework =
   | 'react' | 'nextjs' | 'angular' | 'vue' | 'nuxt'
   | 'svelte' | 'astro' | 'nestjs' | 'express' | 'fastify'
@@ -20,6 +22,8 @@ interface ScannedProject {
   scripts: Record<string, string>
   projectType: ProjectType
   frameworks: Framework[]
+  packageManager?: PackageManager
+  hooks?: Record<string, { pre?: string; post?: string }>
 }
 
 // ─── Framework detector (npm) ──────────────────────────────────────────────
@@ -39,7 +43,7 @@ const FRAMEWORK_DEPS: Array<{ key: string; dep: string | string[]; fw: Framework
   { key: 'express',   dep: 'express',                     fw: 'express'   },
 ]
 
-function detectNpmFrameworks(pkg: Record<string, unknown>): Framework[] {
+function detectNpmFrameworks(pkg: Record<string, unknown>, folderPath?: string): Framework[] {
   const allDeps = {
     ...((pkg.dependencies    as Record<string, string>) ?? {}),
     ...((pkg.devDependencies as Record<string, string>) ?? {}),
@@ -49,11 +53,26 @@ function detectNpmFrameworks(pkg: Record<string, unknown>): Framework[] {
     const deps = Array.isArray(dep) ? dep : [dep]
     if (deps.some(d => d in allDeps)) found.push(fw)
   }
-  // Always add typescript/javascript based on tsconfig or scripts
-  const hasTsConfig = false // checked separately
-  if ('typescript' in allDeps) found.push('typescript')
+  const hasTsConfig = folderPath ? fs.existsSync(path.join(folderPath, 'tsconfig.json')) : false
+  if ('typescript' in allDeps || hasTsConfig) found.push('typescript')
   if (found.length === 0) found.push('node')
   return found
+}
+
+function detectPackageManager(folderPath: string): PackageManager {
+  if (fs.existsSync(path.join(folderPath, 'pnpm-lock.yaml'))) return 'pnpm'
+  if (fs.existsSync(path.join(folderPath, 'yarn.lock')))      return 'yarn'
+  if (fs.existsSync(path.join(folderPath, 'bun.lockb')))      return 'bun'
+  return 'npm'
+}
+
+function pmRunCmd(pm: PackageManager, scriptKey: string): string {
+  switch (pm) {
+    case 'pnpm': return `pnpm run ${scriptKey}`
+    case 'yarn': return `yarn ${scriptKey}`
+    case 'bun':  return `bun run ${scriptKey}`
+    default:     return `npm run ${scriptKey}`
+  }
 }
 
 interface StoredGroup {
@@ -151,10 +170,11 @@ function readNpm(folderPath: string): ScannedProject | null {
   if (!fs.existsSync(pkgPath)) return null
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+    const pm = detectPackageManager(folderPath)
     const rawScripts: Record<string, string> = pkg.scripts || {}
     const scripts: Record<string, string> = {}
     for (const key of Object.keys(rawScripts)) {
-      scripts[key] = `npm run ${key}`
+      scripts[key] = pmRunCmd(pm, key)
     }
     return {
       id: uid(),
@@ -162,7 +182,8 @@ function readNpm(folderPath: string): ScannedProject | null {
       path: folderPath,
       scripts,
       projectType: 'npm',
-      frameworks: detectNpmFrameworks(pkg),
+      frameworks: detectNpmFrameworks(pkg, folderPath),
+      packageManager: pm,
     }
   } catch { return null }
 }
@@ -290,24 +311,49 @@ function detectProject(folderPath: string): ScannedProject | null {
   return readNpm(folderPath) || readMaven(folderPath) || readGradle(folderPath) || readDocker(folderPath)
 }
 
-function scanFolder(folderPath: string): ScannedProject[] {
+const SKIP_DIRS = new Set([
+  'node_modules', 'target', 'build', 'dist', '.git', '.svn',
+  'out', '.next', '.nuxt', '.cache', '__pycache__', '.turbo',
+])
+
+function isMonorepoRoot(folderPath: string): boolean {
+  return (
+    fs.existsSync(path.join(folderPath, 'pnpm-workspace.yaml')) ||
+    fs.existsSync(path.join(folderPath, 'nx.json')) ||
+    fs.existsSync(path.join(folderPath, 'turbo.json')) ||
+    fs.existsSync(path.join(folderPath, 'lerna.json'))
+  )
+}
+
+function scanFolder(folderPath: string, depth = 0): ScannedProject[] {
   const results: ScannedProject[] = []
   let entries: fs.Dirent[]
   try { entries = fs.readdirSync(folderPath, { withFileTypes: true }) }
   catch { return results }
 
+  const monorepo = isMonorepoRoot(folderPath)
+
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'target' || entry.name === 'build') continue
+    if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue
     const subPath = path.join(folderPath, entry.name)
     const project = detectProject(subPath)
-    if (project) results.push(project)
+    if (project) {
+      results.push(project)
+    } else if ((monorepo || depth < 1) && depth < 2) {
+      // Recurse into workspace sub-dirs (apps/, packages/, libs/)
+      const nested = scanFolder(subPath, depth + 1)
+      results.push(...nested)
+    }
   }
   return results
 }
 
 // ─── Process registry ──────────────────────────────────────────────────────
 const runningProcesses = new Map<string, ChildProcess>()
+const autoRestartSet   = new Set<string>()
+// stderr buffer per key — used to detect EADDRINUSE
+const stderrBuffer     = new Map<string, string>()
 
 // ─── Window ────────────────────────────────────────────────────────────────
 let win: BrowserWindow | null = null
@@ -514,56 +560,117 @@ function killProcess(child: ChildProcess) {
   }
 }
 
-function spawnProcess(projectPath: string, command: string, key: string, env: Record<string, string>) {
+function spawnProcess(
+  projectPath: string,
+  command: string,
+  key: string,
+  env: Record<string, string>,
+  projectName?: string,
+) {
   const child = spawn(command, {
     cwd: projectPath,
     shell: true,
     env,
-    // detached: true lets us kill the whole process group on Unix
     detached: process.platform !== 'win32',
   })
 
   runningProcesses.set(key, child)
+  stderrBuffer.set(key, '')
+  const startedAt = Date.now()
 
-  // Notify renderer immediately with the real PID
-  win?.webContents.send('process-started', { key, pid: child.pid ?? null })
+  win?.webContents.send('process-started', { key, pid: child.pid ?? null, startedAt })
 
   child.stdout?.on('data', (data: Buffer) => {
     win?.webContents.send('process-log', { key, data: data.toString(), type: 'stdout' })
   })
   child.stderr?.on('data', (data: Buffer) => {
-    win?.webContents.send('process-log', { key, data: data.toString(), type: 'stderr' })
+    const text = data.toString()
+    const buf = (stderrBuffer.get(key) ?? '') + text
+    stderrBuffer.set(key, buf.slice(-2000))
+    win?.webContents.send('process-log', { key, data: text, type: 'stderr' })
   })
   child.on('exit', (code) => {
     runningProcesses.delete(key)
+    const stderr = stderrBuffer.get(key) ?? ''
+    stderrBuffer.delete(key)
+
+    const scriptLabel = key.split(':').slice(1).join(':') || key
+    const label = projectName ? `${projectName} (${scriptLabel})` : scriptLabel
+
+    // Port conflict detection
+    const portConflict = /EADDRINUSE|address already in use/i.test(stderr)
+    if (portConflict) {
+      win?.webContents.send('process-port-conflict', { key })
+      if (Notification.isSupported()) {
+        new Notification({ title: 'Port already in use', body: `${label} could not start — port is occupied` }).show()
+      }
+    } else if (code !== 0 && code !== null) {
+      // Crash notification — only for non-zero, non-null exits
+      if (Notification.isSupported()) {
+        new Notification({ title: 'Process crashed', body: `${label} exited with code ${code}` }).show()
+      }
+    }
+
     win?.webContents.send('process-exit', { key, code })
+
+    // Auto-restart on crash (non-zero exit, not a manual kill)
+    if (autoRestartSet.has(key) && code !== 0 && code !== null) {
+      const delay = 2000
+      setTimeout(() => {
+        if (!runningProcesses.has(key)) {
+          spawnProcess(projectPath, command, key, env, projectName)
+          win?.webContents.send('process-log', { key, data: `↺ Auto-restarting after crash (exit ${code})…`, type: 'system' })
+        }
+      }, delay)
+    }
   })
 
   return child
 }
 
-// start-process: (projectId, projectPath, scriptKey, command, nodeVersion?, javaVersion?)
-ipcMain.handle('start-process', async (_e, projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string) => {
+// start-process
+ipcMain.handle('start-process', async (
+  _e,
+  projectId: string,
+  projectPath: string,
+  scriptKey: string,
+  command: string,
+  nodeVersion?: string,
+  javaVersion?: string,
+  projectName?: string,
+  preHook?: string,
+) => {
   const key = `${projectId}:${scriptKey}`
   if (runningProcesses.has(key)) {
-    // Race condition guard: the exit event may not have fired yet.
-    // Use kill(pid, 0) to check if the process is actually alive.
     const child = runningProcesses.get(key)!
     const alive = child.pid != null && (() => {
       try { process.kill(child.pid!, 0); return true } catch { return false }
     })()
     if (alive) return { error: 'Already running' }
-    // Stale entry — process died but exit event hasn't fired yet; clean up now
     runningProcesses.delete(key)
   }
   const env = await buildEnv(nodeVersion, javaVersion)
-  spawnProcess(projectPath, command, key, env)
+
+  // Run pre-hook synchronously before spawning main process
+  if (preHook) {
+    win?.webContents.send('process-log', { key, data: `▸ pre-hook: ${preHook}`, type: 'system' })
+    await new Promise<void>((resolve) => {
+      const hookChild = spawn(preHook, { cwd: projectPath, shell: true, env })
+      hookChild.stdout?.on('data', (d: Buffer) => win?.webContents.send('process-log', { key, data: d.toString(), type: 'stdout' }))
+      hookChild.stderr?.on('data', (d: Buffer) => win?.webContents.send('process-log', { key, data: d.toString(), type: 'stderr' }))
+      hookChild.on('exit', () => resolve())
+      hookChild.on('error', () => resolve())
+    })
+  }
+
+  spawnProcess(projectPath, command, key, env, projectName)
   return { success: true }
 })
 
 // stop-process
 ipcMain.handle('stop-process', (_e, projectId: string, scriptKey: string) => {
   const key = `${projectId}:${scriptKey}`
+  autoRestartSet.delete(key)
   const child = runningProcesses.get(key)
   if (!child) return { error: 'Not running' }
   killProcess(child)
@@ -572,16 +679,33 @@ ipcMain.handle('stop-process', (_e, projectId: string, scriptKey: string) => {
 })
 
 // restart-process
-ipcMain.handle('restart-process', async (_e, projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string) => {
+ipcMain.handle('restart-process', async (
+  _e,
+  projectId: string,
+  projectPath: string,
+  scriptKey: string,
+  command: string,
+  nodeVersion?: string,
+  javaVersion?: string,
+  projectName?: string,
+) => {
   const key = `${projectId}:${scriptKey}`
   const existing = runningProcesses.get(key)
   if (existing) {
     killProcess(existing)
     runningProcesses.delete(key)
-    await new Promise(r => setTimeout(r, 500))
+    await new Promise(r => setTimeout(r, 300))
   }
   const env = await buildEnv(nodeVersion, javaVersion)
-  spawnProcess(projectPath, command, key, env)
+  spawnProcess(projectPath, command, key, env, projectName)
+  return { success: true }
+})
+
+// set-auto-restart
+ipcMain.handle('set-auto-restart', (_e, projectId: string, scriptKey: string, enabled: boolean) => {
+  const key = `${projectId}:${scriptKey}`
+  if (enabled) autoRestartSet.add(key)
+  else autoRestartSet.delete(key)
   return { success: true }
 })
 
@@ -610,8 +734,12 @@ ipcMain.handle('get-process-pids', () => {
   return pids
 })
 
-/// ─── Kill any process occupying a port ────────────────────────────────────
+// ─── Port utilities ────────────────────────────────────────────────────────
+
 ipcMain.handle('kill-port', (_e, port: number): Promise<{ success: boolean; error?: string }> => {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return Promise.resolve({ success: false, error: 'Invalid port number' })
+  }
   return new Promise((resolve) => {
     const cmd = process.platform === 'win32'
       ? `for /f "tokens=5" %a in ('netstat -aon ^| findstr :${port} ^| findstr LISTENING') do taskkill /F /PID %a`
@@ -623,6 +751,21 @@ ipcMain.handle('kill-port', (_e, port: number): Promise<{ success: boolean; erro
       if (code === 0) resolve({ success: true })
       else resolve({ success: false, error: `No process found on port ${port}` })
     })
+  })
+})
+
+ipcMain.handle('check-port', (_e, port: number): Promise<{ inUse: boolean; error?: string }> => {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return Promise.resolve({ inUse: false, error: 'Invalid port number' })
+  }
+  return new Promise((resolve) => {
+    const cmd = process.platform === 'win32'
+      ? `netstat -aon | findstr :${port} | findstr LISTENING`
+      : `lsof -ti tcp:${port}`
+    const child = spawn(process.platform === 'win32' ? 'cmd' : 'bash',
+      process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd],
+      { shell: false })
+    child.on('exit', (code) => resolve({ inUse: code === 0 }))
   })
 })
 
@@ -981,4 +1124,119 @@ ipcMain.handle('kubectl-scale', async (_e, deployment: string, namespace: string
   } catch (e: unknown) {
     return { error: (e as Error).message }
   }
+})
+
+// ─── Git info ──────────────────────────────────────────────────────────────
+
+ipcMain.handle('git-info', async (_e, projectPath: string) => {
+  try {
+    const gitDir = path.join(projectPath, '.git')
+    // Walk up to find git root (handles projects inside monorepos)
+    let searchPath = projectPath
+    let found = false
+    for (let i = 0; i < 4; i++) {
+      if (fs.existsSync(path.join(searchPath, '.git'))) { found = true; break }
+      const parent = path.dirname(searchPath)
+      if (parent === searchPath) break
+      searchPath = parent
+    }
+    if (!found) return { branch: null, dirty: false }
+    void gitDir
+
+    const branch = await runCmd('git', ['-C', projectPath, 'rev-parse', '--abbrev-ref', 'HEAD'])
+      .catch(() => null)
+    const statusOut = await runCmd('git', ['-C', projectPath, 'status', '--short'])
+      .catch(() => '')
+    return { branch: branch?.trim() ?? null, dirty: statusOut.trim().length > 0 }
+  } catch {
+    return { branch: null, dirty: false }
+  }
+})
+
+// ─── .env file management ──────────────────────────────────────────────────
+
+const ALLOWED_ENV_FILES = /^\.env(\.[a-zA-Z0-9_-]+)?$/
+
+ipcMain.handle('env-list', async (_e, projectPath: string) => {
+  const candidates = ['.env', '.env.local', '.env.development', '.env.production', '.env.staging', '.env.test', '.env.example']
+  const found: string[] = []
+  for (const f of candidates) {
+    if (fs.existsSync(path.join(projectPath, f))) found.push(f)
+  }
+  return { files: found }
+})
+
+ipcMain.handle('env-read', async (_e, projectPath: string, filename: string) => {
+  if (!ALLOWED_ENV_FILES.test(filename)) return { error: 'Invalid filename' }
+  const fp = path.join(projectPath, filename)
+  if (!fs.existsSync(fp)) return { content: '' }
+  try {
+    return { content: fs.readFileSync(fp, 'utf-8') }
+  } catch (e: unknown) {
+    return { error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('env-write', async (_e, projectPath: string, filename: string, content: string) => {
+  if (!ALLOWED_ENV_FILES.test(filename)) return { error: 'Invalid filename' }
+  const fp = path.join(projectPath, filename)
+  try {
+    fs.writeFileSync(fp, content, 'utf-8')
+    return { success: true }
+  } catch (e: unknown) {
+    return { error: (e as Error).message }
+  }
+})
+
+// ─── License ───────────────────────────────────────────────────────────────
+
+const LICENSE_FILE = path.join(CONFIG_DIR, 'license.json')
+const HMAC_SECRET  = 'devlauncher-letsgo-2024'
+
+interface StoredLicense {
+  key: string
+  tier: string
+  expiresAt: string | null
+  signature: string
+}
+
+function signLicense(key: string, tier: string, expiresAt: string | null): string {
+  return crypto.createHmac('sha256', HMAC_SECRET)
+    .update(`${key}|${tier}|${expiresAt ?? ''}`)
+    .digest('hex')
+}
+
+function readLicense(): StoredLicense | null {
+  try {
+    if (!fs.existsSync(LICENSE_FILE)) return null
+    const data: StoredLicense = JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf-8'))
+    const expected = signLicense(data.key, data.tier, data.expiresAt)
+    if (data.signature !== expected) return null
+    if (data.expiresAt && new Date(data.expiresAt) < new Date()) return null
+    return data
+  } catch { return null }
+}
+
+ipcMain.handle('license-get', () => {
+  const lic = readLicense()
+  if (!lic) return { tier: 'free', expiresAt: null, expired: false }
+  return { tier: lic.tier, expiresAt: lic.expiresAt, expired: false }
+})
+
+ipcMain.handle('license-activate', (_e, key: string) => {
+  // Decode tier from key format: TIER-XXXXXXXX (e.g. PRO-ABCD1234)
+  const parts = key.trim().toUpperCase().split('-')
+  const tierMap: Record<string, string> = { PRO: 'pro', TEAMS: 'teams', ENT: 'teams' }
+  const tier = tierMap[parts[0]] ?? 'pro'
+  const expiresAt = null
+  const signature = signLicense(key, tier, expiresAt)
+  const lic: StoredLicense = { key, tier, expiresAt, signature }
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
+  fs.writeFileSync(LICENSE_FILE, JSON.stringify(lic, null, 2))
+  return { success: true, tier, expiresAt }
+})
+
+ipcMain.handle('license-deactivate', () => {
+  try { fs.unlinkSync(LICENSE_FILE) } catch { /* already gone */ }
+  return { success: true }
 })

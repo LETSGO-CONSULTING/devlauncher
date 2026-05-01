@@ -17,10 +17,11 @@ declare global {
       pickProjectFolder: () => Promise<ProjectGroupType | { error: string } | null>
       getGroups: () => Promise<ProjectGroupType[]>
       saveGroups: (groups: ProjectGroupType[]) => Promise<boolean>
-      startProcess: (projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string) => Promise<{ success?: boolean; error?: string }>
+      startProcess: (projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string, projectName?: string, preHook?: string) => Promise<{ success?: boolean; error?: string }>
       stopProcess: (projectId: string, scriptKey: string) => Promise<{ success?: boolean; error?: string }>
-      restartProcess: (projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string) => Promise<{ success?: boolean; error?: string }>
+      restartProcess: (projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string, projectName?: string) => Promise<{ success?: boolean; error?: string }>
       getRunning: () => Promise<string[]>
+      setAutoRestart: (projectId: string, scriptKey: string, enabled: boolean) => Promise<{ success?: boolean }>
       nodeListVersions:    () => Promise<{ versions: string[]; current: string; nvmFound: boolean; error?: string }>
       nodeInstallVersion:  (version: string) => Promise<{ key?: string; error?: string }>
       nodeUninstallVersion:(version: string) => Promise<{ key?: string; error?: string }>
@@ -46,14 +47,20 @@ declare global {
       kubectlScale: (deployment: string, ns: string, replicas: number) => Promise<{ success?: boolean; error?: string }>
       openExternal: (url: string) => Promise<void>
       killPort: (port: number) => Promise<{ success: boolean; error?: string }>
+      checkPort: (port: number) => Promise<{ inUse: boolean; error?: string }>
       getProcessPids: () => Promise<Record<string, number>>
       sendInput: (projectId: string, scriptKey: string, text: string) => Promise<{ success?: boolean; error?: string }>
+      gitInfo: (projectPath: string) => Promise<{ branch: string | null; dirty: boolean }>
+      envList: (projectPath: string) => Promise<{ files: string[] }>
+      envRead: (projectPath: string, filename: string) => Promise<{ content?: string; error?: string }>
+      envWrite: (projectPath: string, filename: string, content: string) => Promise<{ success?: boolean; error?: string }>
       licenseGet: () => Promise<{ tier: string; expiresAt?: string | null; expired?: boolean }>
       licenseActivate: (key: string) => Promise<{ success?: boolean; tier?: string; expiresAt?: string; error?: string }>
       licenseDeactivate: () => Promise<{ success?: boolean; error?: string }>
       onProcessLog: (cb: (p: { key: string; data: string; type: 'stdout' | 'stderr' }) => void) => () => void
       onProcessExit: (cb: (p: { key: string; code: number | null }) => void) => () => void
-      onProcessStarted: (cb: (p: { key: string; pid: number | null }) => void) => () => void
+      onProcessStarted: (cb: (p: { key: string; pid: number | null; startedAt: number }) => void) => () => void
+      onProcessPortConflict: (cb: (p: { key: string }) => void) => () => void
       onNodeVersionsChanged: (cb: () => void) => () => void
       onJavaVersionsChanged: (cb: () => void) => () => void
     }
@@ -76,7 +83,7 @@ function processLabel(
 }
 
 export default function App() {
-  const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, openLog, closeLog, setActiveLog, openLogs, activeLog, setPid, logLabels, tier, setTier } = useStore()
+  const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, openLog, closeLog, setActiveLog, openLogs, activeLog, setPid, logLabels, tier, setTier, setStartedAt } = useStore()
   const [sidebarTab, setSidebarTab] = useState<'dashboard' | 'projects' | 'sdks' | 'infra' | 'console'>('dashboard')
   const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
   const [overlayHeight, setOverlayHeight] = useState(320)
@@ -125,10 +132,14 @@ export default function App() {
       setStatus(key, code === 0 ? 'stopped' : 'error')
       appendLog(key, { type: 'system', data: `Process exited with code ${code}`, timestamp: Date.now() })
     })
-    const unsubStarted = window.electronAPI.onProcessStarted(({ key, pid }) => {
+    const unsubStarted = window.electronAPI.onProcessStarted(({ key, pid, startedAt }) => {
       if (pid != null) setPid(key, pid)
+      if (startedAt) setStartedAt(key, startedAt)
     })
-    return () => { unsubLog(); unsubExit(); unsubStarted() }
+    const unsubPortConflict = window.electronAPI.onProcessPortConflict(({ key }) => {
+      appendLog(key, { type: 'system', data: '⚠ Port already in use — another process may be using this port', timestamp: Date.now() })
+    })
+    return () => { unsubLog(); unsubExit(); unsubStarted(); unsubPortConflict() }
   }, [])
 
   useEffect(() => {

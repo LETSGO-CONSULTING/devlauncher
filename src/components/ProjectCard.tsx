@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Project, ProcessStatus, ProjectType, Framework } from '../types'
 import { useStore } from '../store'
-import { TechIcon, FRAMEWORK_COLOR, FRAMEWORK_LABEL } from './TechIcon'
 
 interface Props {
   project: Project
@@ -188,34 +187,10 @@ export function ProjectCard({ project }: Props) {
     return <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: 12 }}>No scripts found</div>
   }
 
-  const primaryFw    = frameworks[0]
-  const prefixColor  = primaryFw ? FRAMEWORK_COLOR[primaryFw] : meta.prefixColor
   const defaultPort  = getDefaultPort(frameworks)
 
   return (
     <>
-      {/* Tech badges row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 20px 4px' }}>
-        {frameworks.length > 0
-          ? frameworks.map(fw => (
-              <span key={fw} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <TechIcon framework={fw} size={14} />
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: FRAMEWORK_COLOR[fw], opacity: 0.85 }}>
-                  {FRAMEWORK_LABEL[fw]}
-                </span>
-              </span>
-            ))
-          : (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0.6 }}>
-              <span style={{ fontSize: 12 }}>{meta.icon}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: meta.prefixColor }}>
-                {meta.label}
-              </span>
-            </span>
-          )
-        }
-      </div>
-
       {scripts.map((scriptKey) => {
         const status     = getStatus(scriptKey)
         const key        = getKey(scriptKey)
@@ -237,7 +212,6 @@ export function ProjectCard({ project }: Props) {
             processKey={key}
             prefix={prefix}
             cmd={cmd}
-            prefixColor={prefixColor}
             status={pillClass}
             isRunning={isRunning}
             isSelected={isSelected}
@@ -257,9 +231,9 @@ export function ProjectCard({ project }: Props) {
 
 // ─── Script row with browser detection ─────────────────────────────────────
 
-function ScriptRow({ scriptKey, processKey, prefix, cmd, prefixColor, status, isRunning, isSelected,
+function ScriptRow({ scriptKey, processKey, prefix, cmd, status, isRunning, isSelected,
   showBrowser, defaultPort, restartOnRun, onLogs, onStart, onStop, onRestart }: {
-  scriptKey: string; processKey: string; prefix: string; cmd: string; prefixColor: string
+  scriptKey: string; processKey: string; prefix: string; cmd: string
   status: string; isRunning: boolean; isSelected: boolean
   showBrowser: boolean; defaultPort: number; restartOnRun?: boolean
   onLogs: () => void; onStart: () => void; onStop: () => void; onRestart: () => void
@@ -270,7 +244,7 @@ function ScriptRow({ scriptKey, processKey, prefix, cmd, prefixColor, status, is
   return (
     <div className={`script-row ${isSelected ? 'selected' : ''}`}>
       <span className="script-name">
-        <span className="script-npm" style={{ color: prefixColor }}>{prefix}</span>
+        <span className="script-npm">{prefix}</span>
         <span className="script-cmd"> {cmd}</span>
       </span>
 

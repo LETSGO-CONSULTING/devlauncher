@@ -57,7 +57,7 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
 
         <div className="group-meta">
           <div className="group-name">{group.name}</div>
-          <div className="group-subtitle" style={{ color: accentColor, opacity: 0.8 }}>{subtitle}</div>
+          <div className="group-subtitle">{subtitle}</div>
         </div>
 
         {/* Framework stack badges */}
@@ -81,8 +81,7 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
       {group.projects.map((project) => {
         const isOpen        = expanded[project.id] ?? false
         const projectRunning = Object.keys(project.scripts).some(s => statuses[`${project.id}:${s}`] === 'running')
-        const projFw        = project.frameworks?.[0]
-        const projColor     = projFw ? FRAMEWORK_COLOR[projFw] : '#475569'
+        const projFw = project.frameworks?.[0]
 
         return (
           <div key={project.id} className="sub-project-section">
@@ -92,36 +91,21 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
               style={{ cursor: 'pointer', userSelect: 'none', justifyContent: 'space-between' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {/* Chevron */}
                 <span style={{
                   display: 'inline-block', fontSize: 9,
-                  color: projColor,
+                  color: 'var(--text-muted)',
                   transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                   transition: 'transform 0.18s ease',
                 }}>▶</span>
 
-                {/* Service tech icon */}
-                {projFw && <TechIcon framework={projFw} size={16} />}
+                {projFw && <TechIcon framework={projFw} size={15} />}
 
                 <span style={{ color: 'var(--text-dim)', fontWeight: 600, fontSize: 11 }}>
                   {project.name}
                 </span>
 
-                {/* Framework pills */}
-                {(project.frameworks ?? []).map(fw => (
-                  <span key={fw} style={{
-                    fontSize: 9, fontWeight: 700, letterSpacing: '0.6px',
-                    textTransform: 'uppercase', color: FRAMEWORK_COLOR[fw],
-                    background: `${FRAMEWORK_COLOR[fw]}18`,
-                    border: `1px solid ${FRAMEWORK_COLOR[fw]}33`,
-                    padding: '1px 6px', borderRadius: 4,
-                  }}>
-                    {FRAMEWORK_LABEL[fw]}
-                  </span>
-                ))}
-
                 <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                  ({Object.keys(project.scripts).length} scripts)
+                  · {Object.keys(project.scripts).length} scripts
                 </span>
               </div>
 

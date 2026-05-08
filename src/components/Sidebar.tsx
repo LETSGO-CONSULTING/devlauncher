@@ -1,19 +1,19 @@
 import { useState } from 'react'
 import { ProjectGroup, Framework } from '../types'
 import { useStore } from '../store'
-import { TechIcon, FRAMEWORK_COLOR } from './TechIcon'
+import { TechIcon } from './TechIcon'
 
 interface Props {
   groups: ProjectGroup[]
   onAddProject: () => void
-  onRemove: (id: string) => void
+  onRemove?: (id: string) => void
   activeTab: string
   onTabChange: (tab: string) => void
+  onSelectGroup: (id: string) => void
+  selectedGroupId?: string | null
 }
 
-export function Sidebar({ groups, onAddProject, activeTab, onTabChange }: Props) {
-  const expanded       = useStore((s) => s.expanded)
-  const toggleExpanded = useStore((s) => s.toggleExpanded)
+export function Sidebar({ groups, onAddProject, activeTab, onTabChange, onSelectGroup, selectedGroupId }: Props) {
   const statuses       = useStore((s) => s.statuses)
   const setStatus      = useStore((s) => s.setStatus)
   const appendLog      = useStore((s) => s.appendLog)
@@ -142,44 +142,36 @@ export function Sidebar({ groups, onAddProject, activeTab, onTabChange }: Props)
         </div>
       )}
 
-      {/* Recent projects */}
-      <div className="sidebar-section-label">Recent Projects</div>
+      {/* Projects */}
+      <div className="sidebar-section-label">Projects</div>
       <div className="sidebar-projects">
-        {groups.map((g) => {
-          const primaryFw: Framework | undefined = g.projects.flatMap(p => p.frameworks ?? []).find(Boolean)
-          const accentColor = primaryFw ? FRAMEWORK_COLOR[primaryFw] : '#7c5cfc'
-          const running = isRunning(g)
+        {groups.length === 0
+          ? <div className="sidebar-empty">No projects yet</div>
+          : groups.map((g) => {
+            const primaryFw: Framework | undefined = g.projects.flatMap(p => p.frameworks ?? []).find(Boolean)
+            const running = isRunning(g)
+            const isSelected = selectedGroupId === g.id
 
-          return (
-            <div key={g.id} className="sidebar-group">
-              <div className="sidebar-group-row" onClick={() => toggleExpanded(g.id)}>
-                <span
-                  className="sidebar-group-dot"
-                  style={{ background: running ? '#22c55e' : '#334155' }}
-                />
+            return (
+              <div
+                key={g.id}
+                className={`sidebar-group-row${isSelected ? ' selected' : ''}`}
+                onClick={() => onSelectGroup(g.id)}
+                title={g.path}
+              >
+                <span className="sidebar-group-dot" style={{ background: running ? 'var(--green)' : 'var(--text-muted)' }} />
                 {primaryFw
-                  ? <TechIcon framework={primaryFw} size={14} />
-                  : <span style={{ width: 14, height: 14, display: 'inline-block' }} />
+                  ? <TechIcon framework={primaryFw} size={13} />
+                  : <span style={{ width: 13, flexShrink: 0 }} />
                 }
-                <span className="sidebar-group-name" style={{ color: accentColor }} title={g.path}>
-                  {g.name.toUpperCase()}
-                </span>
+                <span className="sidebar-group-name">{g.name}</span>
+                {running && <span className="sidebar-running-count">
+                  {g.projects.reduce((n, p) => n + Object.keys(p.scripts).filter(s => statuses[`${p.id}:${s}`] === 'running').length, 0)}
+                </span>}
               </div>
-
-              {expanded[g.id] && g.projects.map((p) => {
-                const pFw = p.frameworks?.[0]
-                const pColor = pFw ? FRAMEWORK_COLOR[pFw] : '#475569'
-                return (
-                  <div key={p.id} className="sidebar-project-item" title={p.path}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    {pFw && <TechIcon framework={pFw} size={11} />}
-                    <span style={{ color: pColor, opacity: 0.8 }}>{p.name}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
+            )
+          })
+        }
       </div>
 
       {/* Bottom */}

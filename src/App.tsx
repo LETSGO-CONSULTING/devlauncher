@@ -81,6 +81,7 @@ export default function App() {
   const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
   const [overlayHeight, setOverlayHeight] = useState(320)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 
   // Close a console tab AND stop its process
   const closeAndStop = (key: string) => {
@@ -145,6 +146,8 @@ export default function App() {
     if ('error' in result) { alert(result.error); return }
     addGroup(result)
     await window.electronAPI.saveGroups([...groups, result])
+    setSelectedGroupId(result.id)
+    setSidebarTab('projects')
   }
 
   const handleRemove = (id: string) => {
@@ -160,6 +163,8 @@ export default function App() {
         onRemove={handleRemove}
         activeTab={sidebarTab}
         onTabChange={(tab) => setSidebarTab(tab as 'dashboard' | 'projects' | 'sdks' | 'infra' | 'console')}
+        onSelectGroup={(id) => { setSelectedGroupId(id); setSidebarTab('projects') }}
+        selectedGroupId={selectedGroupId}
       />
 
       <div className="main-area">
@@ -208,7 +213,7 @@ export default function App() {
                 <div className={viewMode === 'grid' ? 'cards-grid' : ''}
                   style={viewMode === 'list' ? { display: 'flex', flexDirection: 'column', gap: 12 } : {}}>
                   {groups.map((g) => (
-                    <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} />
+                    <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} selected={selectedGroupId === g.id} />
                   ))}
                 </div>
               )}

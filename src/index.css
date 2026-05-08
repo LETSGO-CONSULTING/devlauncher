@@ -199,6 +199,10 @@ button:active { transform: scale(0.97); }
   transition: border-color 0.2s;
 }
 .group-card:hover { border-color: #2a3d58; }
+.group-card.selected {
+  box-shadow: 0 0 0 1px rgba(124, 92, 252, 0.3), 0 4px 24px rgba(124, 92, 252, 0.12);
+  border-color: rgba(124, 92, 252, 0.25);
+}
 
 .group-card-header {
   display: flex;
@@ -504,6 +508,24 @@ button:active { transform: scale(0.97); }
   flex: 1;
   overflow-y: auto;
   padding: 0 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sidebar-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 8px;
+  font-style: italic;
+}
+.sidebar-running-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green-text);
+  background: var(--green-dim);
+  padding: 1px 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .sidebar-group {
@@ -520,7 +542,13 @@ button:active { transform: scale(0.97); }
   -webkit-app-region: no-drag;
   transition: background 0.15s;
 }
-.sidebar-group-row:hover { background: var(--surface2); }
+.sidebar-group-row:hover { background: var(--surface2); color: var(--text); }
+.sidebar-group-row.selected {
+  background: var(--accent-dim);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+  color: var(--text);
+}
 
 .sidebar-group-dot {
   width: 7px;

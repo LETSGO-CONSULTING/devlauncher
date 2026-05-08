@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ProjectGroup as ProjectGroupType, Framework } from '../types'
 import { useStore } from '../store'
 import { ProjectCard } from './ProjectCard'
@@ -8,11 +8,18 @@ import { RuntimeSelector } from './RuntimeSelector'
 interface Props {
   group: ProjectGroupType
   onRemove: () => void
+  selected?: boolean
 }
 
-export function ProjectGroup({ group, onRemove }: Props) {
+export function ProjectGroup({ group, onRemove, selected }: Props) {
   const { statuses, runtimeVersions, setRuntimeVersion } = useStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (selected && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [selected])
   const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
 
   const runningCount = group.projects.reduce((acc, p) =>
@@ -36,7 +43,7 @@ export function ProjectGroup({ group, onRemove }: Props) {
     : (primaryFw ? FRAMEWORK_LABEL[primaryFw].toUpperCase() : group.projects[0]?.projectType?.toUpperCase() ?? '')
 
   return (
-    <div className="group-card" style={{ borderTop: `2px solid ${accentColor}22` }}>
+    <div ref={cardRef} className={`group-card${selected ? ' selected' : ''}`} style={{ borderTop: selected ? `2px solid ${accentColor}` : `2px solid ${accentColor}22` }}>
       {/* Card header */}
       <div className="group-card-header">
 

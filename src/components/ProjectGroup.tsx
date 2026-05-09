@@ -5,6 +5,8 @@ import { ProjectCard } from './ProjectCard'
 import { TechIcon, TechIconStack, FRAMEWORK_COLOR, FRAMEWORK_LABEL } from './TechIcon'
 import { RuntimeSelector } from './RuntimeSelector'
 
+interface Editor { id: string; label: string; bin: string }
+
 interface Props {
   group: ProjectGroupType
   onRemove: () => void
@@ -14,25 +16,28 @@ interface Props {
 export function ProjectGroup({ group, onRemove, selected }: Props) {
   const { statuses, runtimeVersions, setRuntimeVersion } = useStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [editors, setEditors] = useState<Array<{ id: string; label: string; bin: string }>>([])
-  const [openWithId, setOpenWithId] = useState<string | null>(null)
+  const [editors, setEditors] = useState<Editor[]>([])
+  const [openWithTarget, setOpenWithTarget] = useState<string | null>(null) // 'group' | projectId
   const cardRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    window.electronAPI.detectEditors().then(setEditors)
-  }, [])
-
-  useEffect(() => {
-    if (!openWithId) return
-    const close = () => setOpenWithId(null)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [openWithId])
   useEffect(() => {
     if (selected && cardRef.current) {
       cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
   }, [selected])
+
+  useEffect(() => {
+    window.electronAPI.detectEditors().then(setEditors)
+  }, [])
+
+  // Close open-with menu on outside click
+  useEffect(() => {
+    if (!openWithTarget) return
+    const handler = () => setOpenWithTarget(null)
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [openWithTarget])
+
   const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
   const expandAll  = () => setExpanded(Object.fromEntries(group.projects.map(p => [p.id, true])))
   const collapseAll = () => setExpanded({})
@@ -75,23 +80,47 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
           <div className="group-subtitle">{subtitle}</div>
         </div>
 
-        {/* Framework stack badges */}
-        {allFws.length > 0 && (
-          <TechIconStack frameworks={allFws} size={18} />
-        )}
+        {/* Right-side actions — all in one flex cluster */}
+        <div className="group-header-actions">
+          {/* Running indicator */}
+          <span
+            className={`group-status-dot${isRunning ? ' running' : ''}`}
+            title={isRunning ? `${runningCount} running` : 'Stopped'}
+          />
 
-        <div className={`status-badge ${isRunning ? 'running' : 'stopped'}`}>
-          <span className="status-dot" />
-          {isRunning ? 'RUNNING' : 'STOPPED'}
-        </div>
+          {/* Expand / collapse all */}
+          <button className="group-action-btn" title="Expand all" onClick={expandAll}>↓↓</button>
+          <button className="group-action-btn" title="Collapse all" onClick={collapseAll}>↑↑</button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button className="group-action-btn" onClick={expandAll} title="Expand all">↓↓</button>
-          <button className="group-action-btn" onClick={collapseAll} title="Collapse all">↑↑</button>
+          {/* Open group folder with editor */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className="open-with-btn"
+              title="Open folder in editor"
+              onClick={(e) => { e.stopPropagation(); setOpenWithTarget(openWithTarget === 'group' ? null : 'group') }}
+            >⎋ Open</button>
+            {openWithTarget === 'group' && (
+              <div className="open-with-menu" onClick={e => e.stopPropagation()}>
+                <div className="open-with-label">Open folder in…</div>
+                {editors.length > 0
+                  ? editors.map(ed => (
+                    <button
+                      key={ed.id}
+                      className="open-with-item"
+                      onClick={() => { window.electronAPI.openInEditor(group.path, ed.bin); setOpenWithTarget(null) }}
+                    >{ed.label}</button>
+                  ))
+                  : <div className="open-with-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No editors found</div>
+                }
+              </div>
+            )}
+          </div>
+
           <button
             onClick={onRemove}
             title="Remove"
-            style={{ background: 'transparent', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px', borderRadius: 6, lineHeight: 1 }}
+            className="group-action-btn"
+            style={{ color: '#ff6b6b' }}
           >×</button>
         </div>
       </div>
@@ -105,7 +134,7 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
         return (
           <div key={project.id} className="sub-project-section">
             <div
-              className={`sub-project-header${isOpen ? ' open' : ''}`}
+              className="sub-project-header"
               onClick={() => toggle(project.id)}
               style={{ cursor: 'pointer', userSelect: 'none', justifyContent: 'space-between' }}
             >
@@ -128,7 +157,7 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {projectRunning && (
                   <span style={{
                     width: 7, height: 7, borderRadius: '50%',
@@ -136,28 +165,31 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                     animation: 'pulse-green 1.8s ease-in-out infinite',
                   }} />
                 )}
-                {editors.length > 0 && (
-                  <div style={{ position: 'relative' }}>
-                    <button
-                      className="open-with-btn"
-                      title="Open with editor"
-                      onClick={e => { e.stopPropagation(); setOpenWithId(openWithId === project.id ? null : project.id) }}
-                    >{ }</button>
-                    {openWithId === project.id && (
-                      <div className="open-with-menu">
-                        {editors.map(ed => (
-                          <button
-                            key={ed.id}
-                            className="open-with-item"
-                            onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithId(null) }}
-                          >
-                            {ed.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Open this sub-project with editor */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    className="open-with-btn"
+                    title="Open in editor"
+                    onClick={(e) => { e.stopPropagation(); setOpenWithTarget(openWithTarget === project.id ? null : project.id) }}
+                  >⎋ Open</button>
+                  {openWithTarget === project.id && editors.length > 0 && (
+                    <div className="open-with-menu" style={{ right: 0, left: 'auto' }} onClick={e => e.stopPropagation()}>
+                      <div className="open-with-label">Open in…</div>
+                      {editors.map(ed => (
+                        <button
+                          key={ed.id}
+                          className="open-with-item"
+                          onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithTarget(null) }}
+                        >{ed.label}</button>
+                      ))}
+                    </div>
+                  )}
+                  {openWithTarget === project.id && editors.length === 0 && (
+                    <div className="open-with-menu" style={{ right: 0, left: 'auto' }} onClick={e => e.stopPropagation()}>
+                      <div className="open-with-label" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No editors found</div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

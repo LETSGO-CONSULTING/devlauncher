@@ -15,7 +15,7 @@ interface JavaVersionInfo {
 }
 
 interface Props {
-  projectType: 'npm' | 'maven' | 'gradle'
+  projectType: 'npm' | 'maven' | 'gradle' | 'docker'
   selectedNode?: string
   selectedJava?: string
   onChange: (nodeVersion?: string, javaVersion?: string) => void

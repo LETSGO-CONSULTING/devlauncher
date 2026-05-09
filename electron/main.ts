@@ -752,45 +752,6 @@ ipcMain.handle('kill-port', (_e, port: number): Promise<{ success: boolean; erro
 ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url))
 ipcMain.handle('open-in-finder', (_e, folderPath: string) => shell.openPath(folderPath))
 
-// ─── Window controls ──────────────────────────────────────────────────────
-ipcMain.handle('window-maximize', () => {
-  if (!win) return
-  if (process.platform === 'darwin') {
-    win.isFullScreen() ? win.setFullScreen(false) : win.setFullScreen(true)
-  } else {
-    win.isMaximized() ? win.unmaximize() : win.maximize()
-  }
-})
-ipcMain.handle('window-minimize', () => win?.minimize())
-ipcMain.handle('window-close',    () => win?.close())
-
-// ─── Editors: detect installed code editors ────────────────────────────────
-const EDITORS = [
-  { id: 'cursor',    label: 'Cursor',         bins: ['cursor'] },
-  { id: 'code',      label: 'VS Code',         bins: ['code'] },
-  { id: 'zed',       label: 'Zed',             bins: ['zed'] },
-  { id: 'webstorm',  label: 'WebStorm',        bins: ['webstorm'] },
-  { id: 'idea',      label: 'IntelliJ IDEA',   bins: ['idea'] },
-  { id: 'subl',      label: 'Sublime Text',    bins: ['subl'] },
-  { id: 'nvim',      label: 'Neovim',          bins: ['nvim'] },
-]
-
-ipcMain.handle('detect-editors', () => {
-  return EDITORS
-    .map(e => ({ ...e, bin: findBin(e.bins) }))
-    .filter(e => e.bin !== null)
-    .map(({ id, label, bin }) => ({ id, label, bin: bin! }))
-})
-
-ipcMain.handle('open-in-editor', (_e, projectPath: string, bin: string) => {
-  try {
-    spawn(bin, [projectPath], { detached: true, stdio: 'ignore' }).unref()
-    return { success: true }
-  } catch (err) {
-    return { error: String(err) }
-  }
-})
-
 // ─── Node: uninstall version ───────────────────────────────────────────────
 ipcMain.handle('node-uninstall-version', (_e, version: string) => {
   if (!fs.existsSync(NVM_SCRIPT)) return { error: 'nvm not found' }

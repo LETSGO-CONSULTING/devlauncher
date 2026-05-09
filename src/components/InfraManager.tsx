@@ -7,7 +7,7 @@ interface DockerInfo {
   version?: string; containers?: number; running?: number
   paused?: number; stopped?: number; images?: number; os?: string
 }
-interface Container { id: string; name: string; image: string; status: string; ports: string; state: string; composeProject: string }
+interface Container { id: string; name: string; image: string; status: string; ports: string; state: string; composeProject?: string }
 interface DockerImage { repo: string; tag: string; id: string; size: string; created: string }
 
 interface K8sPod        { metadata: { name: string; namespace: string }; status: { phase: string; podIP?: string }; spec: { nodeName?: string } }

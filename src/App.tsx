@@ -44,6 +44,11 @@ declare global {
       kubectlPodAction: (action: string, pod: string, ns: string) => Promise<{ success?: boolean; error?: string }>
       kubectlPodLogs: (pod: string, ns: string) => Promise<{ key?: string; error?: string }>
       kubectlScale: (deployment: string, ns: string, replicas: number) => Promise<{ success?: boolean; error?: string }>
+      windowMaximize: () => Promise<void>
+      windowMinimize: () => Promise<void>
+      windowClose:    () => Promise<void>
+      detectEditors: () => Promise<Array<{ id: string; label: string; bin: string }>>
+      openInEditor: (projectPath: string, bin: string) => Promise<{ success?: boolean; error?: string }>
       openExternal: (url: string) => Promise<void>
       killPort: (port: number) => Promise<{ success: boolean; error?: string }>
       getProcessPids: () => Promise<Record<string, number>>
@@ -168,6 +173,11 @@ export default function App() {
       />
 
       <div className="main-area">
+
+        {/* ── Universal drag strip for tabs without TopBar ─────────── */}
+        {sidebarTab !== 'projects' && (
+          <div className="titlebar-drag-strip" onDoubleClick={() => window.electronAPI.windowMaximize()} />
+        )}
 
         {/* ── Dashboard tab ─────────────────────────────────────────── */}
         {sidebarTab === 'dashboard' && (

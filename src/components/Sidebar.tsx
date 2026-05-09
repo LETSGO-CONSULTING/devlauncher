@@ -74,7 +74,7 @@ export function Sidebar({ groups, onAddProject, activeTab, onTabChange, onSelect
   return (
     <aside className="sidebar">
       {/* Logo */}
-      <div className="sidebar-logo">
+      <div className="sidebar-logo" onDoubleClick={() => window.electronAPI.windowMaximize()}>
         <div className="logo-icon">⚡</div>
         <div className="logo-text">
           <div className="logo-name">DevLauncher</div>

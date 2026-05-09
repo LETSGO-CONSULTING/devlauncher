@@ -21,7 +21,18 @@
     },
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "public/icon.icns"
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "identity": "roslin pineda leon matias (44F52JD24V)",
+      "notarize": {
+        "teamId": "44F52JD24V"
+      },
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ]
     },
     "win": {
       "icon": "public/icon.ico"

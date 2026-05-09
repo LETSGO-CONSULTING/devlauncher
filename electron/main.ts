@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
+import { createHmac, randomBytes } from 'crypto'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -64,8 +65,129 @@ interface StoredGroup {
 }
 
 // ─── Config persistence ────────────────────────────────────────────────────
-const CONFIG_DIR  = path.join(os.homedir(), '.devlauncher')
-const CONFIG_FILE = path.join(CONFIG_DIR, 'groups.json')
+const CONFIG_DIR    = path.join(os.homedir(), '.devlauncher')
+const CONFIG_FILE   = path.join(CONFIG_DIR, 'groups.json')
+const LICENSE_FILE  = path.join(CONFIG_DIR, 'license.json')
+
+// ─── License system ────────────────────────────────────────────────────────
+//
+// Key format:  DLPRO-YYYYMMDD-NNNNN-HHHHHHHHHHHH
+//              DLTEA-YYYYMMDD-NNNNN-HHHHHHHHHHHH
+//
+//   DLPRO / DLTEA  = tier prefix (5 chars)
+//   YYYYMMDD       = expiry date (8 chars)
+//   NNNNN          = 5-char random nonce (A-Z)
+//   HHHHHHHHHHHH   = 12-char HMAC-SHA256 (48-bit, uppercase hex)
+//
+// ⚠️  Replace LICENSE_HMAC_SECRET with a strong random value before
+//     shipping. Inject it at build time via an env variable so it never
+//     appears in the public repo:
+//       DEVLAUNCHER_LICENSE_SECRET=<secret> npm run build
+//
+const LICENSE_HMAC_SECRET =
+  process.env.DEVLAUNCHER_LICENSE_SECRET ?? 'DL-DEV-PLACEHOLDER-REPLACE-BEFORE-SHIPPING'
+
+type LicenseTier = 'free' | 'pro' | 'teams'
+
+interface StoredLicense {
+  key:         string
+  tier:        LicenseTier
+  expiresAt:   string   // ISO date string
+  activatedAt: string
+}
+
+function licenseHmac(tier: string, expires: string, nonce: string): string {
+  return createHmac('sha256', LICENSE_HMAC_SECRET)
+    .update(`${tier}:${expires}:${nonce}`)
+    .digest('hex')
+    .slice(0, 12)
+    .toUpperCase()
+}
+
+function validateKey(key: string): { ok: true; tier: LicenseTier; expiresAt: Date } | { ok: false; error: string } {
+  const clean = key.trim().toUpperCase().replace(/[\s]/g, '')
+  const parts = clean.split('-')
+
+  // Expected 4 parts: prefix, expires, nonce, hmac
+  if (parts.length !== 4) return { ok: false, error: 'Invalid key format. Expected DLPRO-YYYYMMDD-NNNNN-HHHHHHHHHHHH' }
+
+  const [prefix, expires, nonce, hmac] = parts
+
+  const tier: LicenseTier | null =
+    prefix === 'DLPRO' ? 'pro' :
+    prefix === 'DLTEA' ? 'teams' : null
+
+  if (!tier)                           return { ok: false, error: 'Unknown license tier prefix' }
+  if (!/^\d{8}$/.test(expires))        return { ok: false, error: 'Invalid expiry date in key' }
+  if (!/^[A-Z]{5}$/.test(nonce))       return { ok: false, error: 'Invalid nonce in key' }
+  if (hmac.length !== 12)              return { ok: false, error: 'Invalid signature length' }
+
+  const expected = licenseHmac(tier, expires, nonce)
+  if (hmac !== expected)               return { ok: false, error: 'License key is invalid or has been tampered with' }
+
+  const yr = parseInt(expires.slice(0, 4))
+  const mo = parseInt(expires.slice(4, 6)) - 1
+  const dy = parseInt(expires.slice(6, 8))
+  const expiresAt = new Date(yr, mo, dy, 23, 59, 59)
+  if (expiresAt < new Date())          return { ok: false, error: `License expired on ${expiresAt.toLocaleDateString()}` }
+
+  return { ok: true, tier, expiresAt }
+}
+
+function loadStoredLicense(): StoredLicense | null {
+  try {
+    if (!fs.existsSync(LICENSE_FILE)) return null
+    return JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf-8')) as StoredLicense
+  } catch { return null }
+}
+
+// ─── License IPC ───────────────────────────────────────────────────────────
+
+ipcMain.handle('license-get', () => {
+  const stored = loadStoredLicense()
+  if (!stored) return { tier: 'free' }
+
+  const result = validateKey(stored.key)
+  if (!result.ok) {
+    // Key is invalid or expired — wipe it so user sees free tier
+    try { fs.unlinkSync(LICENSE_FILE) } catch { /* ignore */ }
+    return { tier: 'free', expired: true }
+  }
+  return {
+    tier:        result.tier,
+    expiresAt:   result.expiresAt.toISOString(),
+    activatedAt: stored.activatedAt,
+    key:         stored.key,
+  }
+})
+
+ipcMain.handle('license-activate', (_e, key: string) => {
+  const result = validateKey(key)
+  if (!result.ok) return { success: false, error: result.error }
+
+  const stored: StoredLicense = {
+    key:         key.trim().toUpperCase(),
+    tier:        result.tier,
+    expiresAt:   result.expiresAt.toISOString(),
+    activatedAt: new Date().toISOString(),
+  }
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
+    fs.writeFileSync(LICENSE_FILE, JSON.stringify(stored, null, 2))
+    return { success: true, tier: result.tier, expiresAt: result.expiresAt.toISOString() }
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('license-deactivate', () => {
+  try {
+    if (fs.existsSync(LICENSE_FILE)) fs.unlinkSync(LICENSE_FILE)
+    return { success: true }
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message }
+  }
+})
 
 // Re-detect frameworks for a project that is missing the field
 function migrateProject(p: ScannedProject): ScannedProject {
@@ -628,6 +750,45 @@ ipcMain.handle('kill-port', (_e, port: number): Promise<{ success: boolean; erro
 
 // ─── Shell: open URL in default browser ───────────────────────────────────
 ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url))
+
+// ─── Window controls ──────────────────────────────────────────────────────
+ipcMain.handle('window-maximize', () => {
+  if (!win) return
+  if (process.platform === 'darwin') {
+    win.isFullScreen() ? win.setFullScreen(false) : win.setFullScreen(true)
+  } else {
+    win.isMaximized() ? win.unmaximize() : win.maximize()
+  }
+})
+ipcMain.handle('window-minimize', () => win?.minimize())
+ipcMain.handle('window-close',    () => win?.close())
+
+// ─── Editors: detect installed code editors ────────────────────────────────
+const EDITORS = [
+  { id: 'cursor',    label: 'Cursor',         bins: ['cursor'] },
+  { id: 'code',      label: 'VS Code',         bins: ['code'] },
+  { id: 'zed',       label: 'Zed',             bins: ['zed'] },
+  { id: 'webstorm',  label: 'WebStorm',        bins: ['webstorm'] },
+  { id: 'idea',      label: 'IntelliJ IDEA',   bins: ['idea'] },
+  { id: 'subl',      label: 'Sublime Text',    bins: ['subl'] },
+  { id: 'nvim',      label: 'Neovim',          bins: ['nvim'] },
+]
+
+ipcMain.handle('detect-editors', () => {
+  return EDITORS
+    .map(e => ({ ...e, bin: findBin(e.bins) }))
+    .filter(e => e.bin !== null)
+    .map(({ id, label, bin }) => ({ id, label, bin: bin! }))
+})
+
+ipcMain.handle('open-in-editor', (_e, projectPath: string, bin: string) => {
+  try {
+    spawn(bin, [projectPath], { detached: true, stdio: 'ignore' }).unref()
+    return { success: true }
+  } catch (err) {
+    return { error: String(err) }
+  }
+})
 
 // ─── Node: uninstall version ───────────────────────────────────────────────
 ipcMain.handle('node-uninstall-version', (_e, version: string) => {

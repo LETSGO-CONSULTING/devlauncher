@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   javaListVersions:   () => ipcRenderer.invoke('java-list-versions'),
   javaInstallVersion: (cask: string) => ipcRenderer.invoke('java-install-version', cask),
 
+  // ── License ───────────────────────────────────────────────
+  licenseGet:        ()              => ipcRenderer.invoke('license-get'),
+  licenseActivate:   (key: string)   => ipcRenderer.invoke('license-activate', key),
+  licenseDeactivate: ()              => ipcRenderer.invoke('license-deactivate'),
+
   // ── Tool availability ─────────────────────────────────────
   checkTools: () => ipcRenderer.invoke('check-tools'),
 
@@ -45,6 +50,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   kubectlPodAction:  (action: string, pod: string, ns: string)           => ipcRenderer.invoke('kubectl-pod-action', action, pod, ns),
   kubectlPodLogs:    (pod: string, ns: string)                           => ipcRenderer.invoke('kubectl-pod-logs', pod, ns),
   kubectlScale:      (deployment: string, ns: string, replicas: number)  => ipcRenderer.invoke('kubectl-scale', deployment, ns, replicas),
+
+  // ── Window ────────────────────────────────────────────────
+  windowMaximize: () => ipcRenderer.invoke('window-maximize'),
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowClose:    () => ipcRenderer.invoke('window-close'),
+
+  // ── Editors ───────────────────────────────────────────────
+  detectEditors: () => ipcRenderer.invoke('detect-editors'),
+  openInEditor: (projectPath: string, bin: string) => ipcRenderer.invoke('open-in-editor', projectPath, bin),
 
   // ── Shell / system ────────────────────────────────────────
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

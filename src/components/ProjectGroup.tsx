@@ -14,13 +14,28 @@ interface Props {
 export function ProjectGroup({ group, onRemove, selected }: Props) {
   const { statuses, runtimeVersions, setRuntimeVersion } = useStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [editors, setEditors] = useState<Array<{ id: string; label: string; bin: string }>>([])
+  const [openWithId, setOpenWithId] = useState<string | null>(null)
   const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    window.electronAPI.detectEditors().then(setEditors)
+  }, [])
+
+  useEffect(() => {
+    if (!openWithId) return
+    const close = () => setOpenWithId(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [openWithId])
   useEffect(() => {
     if (selected && cardRef.current) {
       cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
   }, [selected])
   const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  const expandAll  = () => setExpanded(Object.fromEntries(group.projects.map(p => [p.id, true])))
+  const collapseAll = () => setExpanded({})
 
   const runningCount = group.projects.reduce((acc, p) =>
     acc + Object.keys(p.scripts).filter(s => statuses[`${p.id}:${s}`] === 'running').length, 0
@@ -70,11 +85,15 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
           {isRunning ? 'RUNNING' : 'STOPPED'}
         </div>
 
-        <button
-          onClick={onRemove}
-          title="Remove"
-          style={{ background: 'transparent', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px', borderRadius: 6, marginLeft: 4, lineHeight: 1 }}
-        >×</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button className="group-action-btn" onClick={expandAll} title="Expand all">↓↓</button>
+          <button className="group-action-btn" onClick={collapseAll} title="Collapse all">↑↑</button>
+          <button
+            onClick={onRemove}
+            title="Remove"
+            style={{ background: 'transparent', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px', borderRadius: 6, lineHeight: 1 }}
+          >×</button>
+        </div>
       </div>
 
       {/* Sub-projects — collapsible, start collapsed */}
@@ -86,7 +105,7 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
         return (
           <div key={project.id} className="sub-project-section">
             <div
-              className="sub-project-header"
+              className={`sub-project-header${isOpen ? ' open' : ''}`}
               onClick={() => toggle(project.id)}
               style={{ cursor: 'pointer', userSelect: 'none', justifyContent: 'space-between' }}
             >
@@ -109,13 +128,37 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                 </span>
               </div>
 
-              {projectRunning && (
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: 'var(--green)', display: 'inline-block',
-                  marginRight: 4, animation: 'pulse-green 1.8s ease-in-out infinite',
-                }} />
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+                {projectRunning && (
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: 'var(--green)', display: 'inline-block',
+                    animation: 'pulse-green 1.8s ease-in-out infinite',
+                  }} />
+                )}
+                {editors.length > 0 && (
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      className="open-with-btn"
+                      title="Open with editor"
+                      onClick={e => { e.stopPropagation(); setOpenWithId(openWithId === project.id ? null : project.id) }}
+                    >{ }</button>
+                    {openWithId === project.id && (
+                      <div className="open-with-menu">
+                        {editors.map(ed => (
+                          <button
+                            key={ed.id}
+                            className="open-with-item"
+                            onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithId(null) }}
+                          >
+                            {ed.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {isOpen && (

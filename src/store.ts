@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { ProjectGroup, ProcessStatus, LogEntry } from './types'
 
+export type Tier = 'free' | 'pro' | 'teams'
+
 interface AppState {
   groups: ProjectGroup[]
   expanded: Record<string, boolean>
@@ -16,6 +18,9 @@ interface AppState {
   logCounts: Record<string, number>
   // human-readable labels for infra log keys (docker / k8s)
   logLabels: Record<string, { name: string; script: string }>
+  // current license tier
+  tier: Tier
+  licenseExpiresAt: string | null  // ISO string or null
 
   setGroups: (groups: ProjectGroup[]) => void
   addGroup: (group: ProjectGroup) => void
@@ -30,6 +35,7 @@ interface AppState {
   setRuntimeVersion: (projectId: string, node?: string, java?: string) => void
   setPid: (key: string, pid: number) => void
   setLogLabel: (key: string, label: { name: string; script: string }) => void
+  setTier: (tier: Tier, expiresAt?: string | null) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -43,6 +49,8 @@ export const useStore = create<AppState>((set) => ({
   processPids: {},
   logCounts: {},
   logLabels: {},
+  tier: 'free',
+  licenseExpiresAt: null,
 
   setGroups: (groups) => set({ groups }),
 
@@ -106,4 +114,6 @@ export const useStore = create<AppState>((set) => ({
 
   setLogLabel: (key, label) =>
     set((s) => ({ logLabels: { ...s.logLabels, [key]: label } })),
+
+  setTier: (tier, expiresAt = null) => set({ tier, licenseExpiresAt: expiresAt ?? null }),
 }))

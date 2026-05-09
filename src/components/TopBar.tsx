@@ -35,7 +35,11 @@ export function TopBar({ onSearch }: Props) {
   const clear = () => setQuery('')
 
   return (
-    <div className="topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+    <div
+      className="topbar"
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      onDoubleClick={() => window.electronAPI.windowMaximize()}
+    >
 
       {/* Workspace label */}
       <div className="topbar-workspace">

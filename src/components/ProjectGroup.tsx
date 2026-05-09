@@ -75,47 +75,45 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
           }
         </div>
 
+        {/* Name + Open btn inline */}
         <div className="group-meta">
-          <div className="group-name">{group.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="group-name">{group.name}</div>
+            {/* Open folder — next to name */}
+            <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+              <button
+                className="open-with-btn"
+                title="Open folder in editor"
+                onClick={() => setOpenWithTarget(openWithTarget === 'group' ? null : 'group')}
+              >⎋ Open</button>
+              {openWithTarget === 'group' && (
+                <div className="open-with-menu">
+                  <div className="open-with-label">Open folder in…</div>
+                  {editors.length > 0
+                    ? editors.map(ed => (
+                      <button
+                        key={ed.id}
+                        className="open-with-item"
+                        onClick={() => { window.electronAPI.openInEditor(group.path, ed.bin); setOpenWithTarget(null) }}
+                      >{ed.label}</button>
+                    ))
+                    : <div className="open-with-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No editors found</div>
+                  }
+                </div>
+              )}
+            </div>
+          </div>
           <div className="group-subtitle">{subtitle}</div>
         </div>
 
-        {/* Right-side actions — all in one flex cluster */}
+        {/* Right-side actions */}
         <div className="group-header-actions">
-          {/* Running indicator */}
           <span
             className={`group-status-dot${isRunning ? ' running' : ''}`}
             title={isRunning ? `${runningCount} running` : 'Stopped'}
           />
-
-          {/* Expand / collapse all */}
           <button className="group-action-btn" title="Expand all" onClick={expandAll}>↓↓</button>
           <button className="group-action-btn" title="Collapse all" onClick={collapseAll}>↑↑</button>
-
-          {/* Open group folder with editor */}
-          <div style={{ position: 'relative' }}>
-            <button
-              className="open-with-btn"
-              title="Open folder in editor"
-              onClick={(e) => { e.stopPropagation(); setOpenWithTarget(openWithTarget === 'group' ? null : 'group') }}
-            >⎋ Open</button>
-            {openWithTarget === 'group' && (
-              <div className="open-with-menu" onClick={e => e.stopPropagation()}>
-                <div className="open-with-label">Open folder in…</div>
-                {editors.length > 0
-                  ? editors.map(ed => (
-                    <button
-                      key={ed.id}
-                      className="open-with-item"
-                      onClick={() => { window.electronAPI.openInEditor(group.path, ed.bin); setOpenWithTarget(null) }}
-                    >{ed.label}</button>
-                  ))
-                  : <div className="open-with-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No editors found</div>
-                }
-              </div>
-            )}
-          </div>
-
           <button
             onClick={onRemove}
             title="Remove"

@@ -74,6 +74,7 @@ button:active { transform: scale(0.97); }
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  position: relative;
 }
 
 /* ── Topbar ──────────────────────────────────────────────── */
@@ -315,6 +316,107 @@ button:active { transform: scale(0.97); }
 }
 
 .sub-project-header:first-child { border-top: none; }
+
+/* ── Group header actions cluster ───────────────────────── */
+.group-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.group-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(148,163,184,0.3);
+  display: inline-block;
+  flex-shrink: 0;
+}
+.group-status-dot.running {
+  background: var(--green);
+  animation: pulse-green 1.8s ease-in-out infinite;
+}
+
+/* ── Group action buttons (expand/collapse all, open-with) ── */
+.group-action-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.group-action-btn:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+
+.open-with-btn {
+  background: rgba(124,92,252,0.1);
+  border: 1px solid rgba(124,92,252,0.25);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.open-with-btn:hover { background: rgba(124,92,252,0.22); border-color: rgba(124,92,252,0.5); }
+
+.open-with-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  z-index: 999;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+.open-with-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 12px 4px;
+}
+
+.open-with-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.open-with-item:hover { background: var(--surface2); color: var(--text); }
+
+/* ── Titlebar drag strip (non-Projects tabs) ─────────────── */
+.titlebar-drag-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  -webkit-app-region: drag;
+  pointer-events: none;
+  z-index: 10;
+}
 
 /* ── Script row ──────────────────────────────────────────── */
 .script-row {

@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import { ProjectCard } from './ProjectCard'
 import { TechIcon, TechIconStack, FRAMEWORK_COLOR, FRAMEWORK_LABEL } from './TechIcon'
 import { RuntimeSelector } from './RuntimeSelector'
+import { EditorIcon } from './EditorIcon'
 
 interface Editor { id: string; label: string; bin: string }
 
@@ -97,7 +98,10 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                       key={ed.id}
                       className="open-with-item"
                       onClick={() => { window.electronAPI.openInEditor(group.path, ed.bin); setOpenWithTarget(null) }}
-                    >{ed.label}</button>
+                    >
+                      <EditorIcon editorId={ed.id} label={ed.label} />
+                      {ed.label}
+                    </button>
                   ))}
                 </div>
               )}
@@ -169,7 +173,10 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                           key={ed.id}
                           className="open-with-item"
                           onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithTarget(null) }}
-                        >{ed.label}</button>
+                        >
+                          <EditorIcon editorId={ed.id} label={ed.label} />
+                          {ed.label}
+                        </button>
                       ))}
                     </div>
                   )}

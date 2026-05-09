@@ -1,4 +1,4 @@
-export type ProjectType = 'npm' | 'maven' | 'gradle' | 'docker'
+export type ProjectType = 'npm' | 'maven' | 'gradle' | 'docker' | 'composer' | 'python' | 'ruby' | 'go' | 'rust'
 
 export type Framework =
   | 'react'   | 'nextjs'   | 'angular'  | 'vue'      | 'nuxt'
@@ -6,6 +6,11 @@ export type Framework =
   | 'vite'    | 'electron' | 'spring'   | 'node'
   | 'typescript' | 'javascript'
   | 'docker'
+  | 'laravel' | 'symfony'  | 'php'
+  | 'django'  | 'flask'    | 'fastapi'  | 'python'
+  | 'rails'   | 'ruby'
+  | 'go'
+  | 'rust'
 
 export interface Project {
   id: string

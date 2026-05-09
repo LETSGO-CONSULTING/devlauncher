@@ -7,17 +7,27 @@ interface Props {
 }
 
 const PRIORITY_SCRIPTS: Record<ProjectType, string[]> = {
-  npm:    ['dev', 'start', 'serve', 'preview', 'build', 'test', 'lint'],
-  maven:  ['spring-boot:run', 'clean install', 'test', 'package', 'clean'],
-  gradle: ['bootRun', 'build', 'test', 'clean', 'jar'],
-  docker: ['up', 'up -d', 'down', 'build', 'logs', 'ps', 'run'],
+  npm:      ['dev', 'start', 'serve', 'preview', 'build', 'test', 'lint'],
+  maven:    ['spring-boot:run', 'clean install', 'test', 'package', 'clean'],
+  gradle:   ['bootRun', 'build', 'test', 'clean', 'jar'],
+  docker:   ['up', 'up -d', 'down', 'build', 'logs', 'ps', 'run'],
+  composer: ['serve', 'install', 'migrate', 'test', 'queue', 'console', 'dump'],
+  python:   ['runserver', 'dev', 'start', 'migrate', 'test', 'shell', 'install'],
+  ruby:     ['server', 'install', 'migrate', 'test', 'console', 'exec'],
+  go:       ['run', 'build', 'test', 'tidy', 'vet'],
+  rust:     ['run', 'build', 'release', 'test', 'check', 'clippy'],
 }
 
 const TYPE_META: Record<ProjectType, { prefix: string; prefixColor: string; icon: string; label: string }> = {
-  npm:    { prefix: 'npm',            prefixColor: 'var(--accent)', icon: '📦', label: 'Node.js'     },
-  maven:  { prefix: 'mvn',           prefixColor: '#f97316',       icon: '☕', label: 'Spring Boot'  },
-  gradle: { prefix: './gradlew',      prefixColor: '#22d3ee',       icon: '🐘', label: 'Gradle'      },
-  docker: { prefix: 'docker compose', prefixColor: '#2496ED',       icon: '🐳', label: 'Docker'      },
+  npm:      { prefix: 'npm',            prefixColor: 'var(--accent)', icon: '📦', label: 'Node.js'      },
+  maven:    { prefix: 'mvn',            prefixColor: '#f97316',       icon: '☕', label: 'Spring Boot'  },
+  gradle:   { prefix: './gradlew',      prefixColor: '#22d3ee',       icon: '🐘', label: 'Gradle'       },
+  docker:   { prefix: 'docker compose', prefixColor: '#2496ED',       icon: '🐳', label: 'Docker'       },
+  composer: { prefix: 'composer',       prefixColor: '#885630',       icon: '🎼', label: 'PHP/Composer' },
+  python:   { prefix: 'python',         prefixColor: '#3776AB',       icon: '🐍', label: 'Python'       },
+  ruby:     { prefix: 'bundle',         prefixColor: '#CC342D',       icon: '💎', label: 'Ruby'         },
+  go:       { prefix: 'go',             prefixColor: '#00ADD8',       icon: '🐹', label: 'Go'           },
+  rust:     { prefix: 'cargo',          prefixColor: '#CE412B',       icon: '🦀', label: 'Rust'         },
 }
 
 // Frontend frameworks that run a dev server with a URL

@@ -20,6 +20,17 @@ const FRAMEWORK_ICON: Record<Framework, string> = {
   typescript: 'logos:typescript-icon',
   javascript: 'logos:javascript',
   docker:     'logos:docker-icon',
+  laravel:    'logos:laravel',
+  symfony:    'logos:symfony',
+  php:        'logos:php',
+  django:     'logos:django-icon',
+  flask:      'logos:flask',
+  fastapi:    'logos:fastapi-icon',
+  python:     'logos:python',
+  rails:      'logos:rails',
+  ruby:       'logos:ruby',
+  go:         'logos:go',
+  rust:       'logos:rust',
 }
 
 // ─── Native brand colors (for text/accents when needed) ───────────────────
@@ -41,6 +52,17 @@ export const FRAMEWORK_COLOR: Record<Framework, string> = {
   typescript: '#3178C6',
   javascript: '#F7DF1E',
   docker:     '#2496ED',
+  laravel:    '#FF2D20',
+  symfony:    '#1A171B',
+  php:        '#777BB4',
+  django:     '#092E20',
+  flask:      '#ffffff',
+  fastapi:    '#009688',
+  python:     '#3776AB',
+  rails:      '#CC0000',
+  ruby:       '#CC342D',
+  go:         '#00ADD8',
+  rust:       '#CE412B',
 }
 
 export const FRAMEWORK_LABEL: Record<Framework, string> = {
@@ -61,6 +83,17 @@ export const FRAMEWORK_LABEL: Record<Framework, string> = {
   typescript: 'TypeScript',
   javascript: 'JavaScript',
   docker:     'Docker',
+  laravel:    'Laravel',
+  symfony:    'Symfony',
+  php:        'PHP',
+  django:     'Django',
+  flask:      'Flask',
+  fastapi:    'FastAPI',
+  python:     'Python',
+  rails:      'Rails',
+  ruby:       'Ruby',
+  go:         'Go',
+  rust:       'Rust',
 }
 
 // ─── Single icon ──────────────────────────────────────────────────────────

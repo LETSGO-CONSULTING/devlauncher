@@ -403,7 +403,9 @@ button:active { transform: scale(0.97); }
 }
 
 .open-with-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   background: transparent;

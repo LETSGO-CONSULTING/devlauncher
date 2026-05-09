@@ -6,13 +6,18 @@ import * as fs from 'fs'
 import * as os from 'os'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
-type ProjectType = 'npm' | 'maven' | 'gradle' | 'docker'
+type ProjectType = 'npm' | 'maven' | 'gradle' | 'docker' | 'composer' | 'python' | 'ruby' | 'go' | 'rust'
 type Framework =
   | 'react' | 'nextjs' | 'angular' | 'vue' | 'nuxt'
   | 'svelte' | 'astro' | 'nestjs' | 'express' | 'fastify'
   | 'vite' | 'electron' | 'spring' | 'node'
   | 'typescript' | 'javascript'
   | 'docker'
+  | 'laravel' | 'symfony' | 'php'
+  | 'django' | 'flask' | 'fastapi' | 'python'
+  | 'rails' | 'ruby'
+  | 'go'
+  | 'rust'
 
 interface ScannedProject {
   id: string
@@ -196,9 +201,12 @@ function migrateProject(p: ScannedProject): ScannedProject {
   if (p.projectType === 'maven' || p.projectType === 'gradle') {
     return { ...p, frameworks: ['spring'] }
   }
-  if (p.projectType === 'docker') {
-    return { ...p, frameworks: ['docker'] }
-  }
+  if (p.projectType === 'docker')    return { ...p, frameworks: ['docker'] }
+  if (p.projectType === 'composer')  return { ...p, frameworks: ['php'] }
+  if (p.projectType === 'python')    return { ...p, frameworks: ['python'] }
+  if (p.projectType === 'ruby')      return { ...p, frameworks: ['ruby'] }
+  if (p.projectType === 'go')        return { ...p, frameworks: ['go'] }
+  if (p.projectType === 'rust')      return { ...p, frameworks: ['rust'] }
 
   // npm — read package.json again
   const pkgPath = path.join(p.path, 'package.json')
@@ -408,8 +416,170 @@ function readDocker(folderPath: string): ScannedProject | null {
   }
 }
 
+// ─── PHP / Composer detector ───────────────────────────────────────────────
+function readComposer(folderPath: string): ScannedProject | null {
+  const composerPath = path.join(folderPath, 'composer.json')
+  if (!fs.existsSync(composerPath)) return null
+  try {
+    const pkg = JSON.parse(fs.readFileSync(composerPath, 'utf-8'))
+    const require: Record<string, string> = pkg.require ?? {}
+    const name = pkg.name ? path.basename(pkg.name) : path.basename(folderPath)
+
+    const frameworks: Framework[] = []
+    if ('laravel/framework' in require)      frameworks.push('laravel')
+    else if ('symfony/symfony' in require || 'symfony/framework-bundle' in require) frameworks.push('symfony')
+    else frameworks.push('php')
+
+    const isLaravel  = frameworks.includes('laravel')
+    const isSymfony  = frameworks.includes('symfony')
+    const scripts: Record<string, string> = isLaravel
+      ? {
+          'serve':   'php artisan serve',
+          'install': 'composer install',
+          'migrate': 'php artisan migrate',
+          'test':    'php artisan test',
+          'queue':   'php artisan queue:work',
+        }
+      : isSymfony
+      ? {
+          'serve':   'symfony serve',
+          'install': 'composer install',
+          'console': 'php bin/console',
+          'test':    'php bin/phpunit',
+        }
+      : {
+          'install': 'composer install',
+          'serve':   'php -S localhost:8000',
+          'test':    'composer test',
+          'dump':    'composer dump-autoload',
+        }
+
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'composer', frameworks }
+  } catch { return null }
+}
+
+// ─── Python detector ────────────────────────────────────────────────────────
+function readPython(folderPath: string): ScannedProject | null {
+  const hasReqs    = fs.existsSync(path.join(folderPath, 'requirements.txt'))
+  const hasPyproj  = fs.existsSync(path.join(folderPath, 'pyproject.toml'))
+  const hasManage  = fs.existsSync(path.join(folderPath, 'manage.py'))
+  const hasSetup   = fs.existsSync(path.join(folderPath, 'setup.py'))
+  if (!hasReqs && !hasPyproj && !hasManage && !hasSetup) return null
+
+  const name = path.basename(folderPath)
+  const frameworks: Framework[] = []
+
+  // Read requirements for framework detection
+  let reqs = ''
+  if (hasReqs) {
+    try { reqs = fs.readFileSync(path.join(folderPath, 'requirements.txt'), 'utf-8').toLowerCase() } catch { /* */ }
+  }
+  if (hasManage || reqs.includes('django'))          frameworks.push('django')
+  else if (reqs.includes('fastapi'))                 frameworks.push('fastapi')
+  else if (reqs.includes('flask'))                   frameworks.push('flask')
+  else                                               frameworks.push('python')
+
+  const isDjango  = frameworks.includes('django')
+  const isFastAPI = frameworks.includes('fastapi')
+  const scripts: Record<string, string> = isDjango
+    ? {
+        'runserver': 'python manage.py runserver',
+        'migrate':   'python manage.py migrate',
+        'test':      'python manage.py test',
+        'shell':     'python manage.py shell',
+        'install':   'pip install -r requirements.txt',
+      }
+    : isFastAPI
+    ? {
+        'dev':     'uvicorn main:app --reload',
+        'start':   'uvicorn main:app',
+        'install': 'pip install -r requirements.txt',
+      }
+    : {
+        'start':   'python app.py',
+        'dev':     'flask run --debug',
+        'install': 'pip install -r requirements.txt',
+        'test':    'pytest',
+      }
+
+  return { id: uid(), name, path: folderPath, scripts, projectType: 'python', frameworks }
+}
+
+// ─── Ruby / Rails detector ──────────────────────────────────────────────────
+function readRuby(folderPath: string): ScannedProject | null {
+  const gemfilePath = path.join(folderPath, 'Gemfile')
+  if (!fs.existsSync(gemfilePath)) return null
+  try {
+    const content = fs.readFileSync(gemfilePath, 'utf-8')
+    const name = path.basename(folderPath)
+    const isRails = /gem ['"]rails['"]/.test(content)
+    const frameworks: Framework[] = [isRails ? 'rails' : 'ruby']
+    const scripts: Record<string, string> = isRails
+      ? {
+          'server':  'rails server',
+          'install': 'bundle install',
+          'migrate': 'rails db:migrate',
+          'test':    'rails test',
+          'console': 'rails console',
+        }
+      : {
+          'install': 'bundle install',
+          'test':    'bundle exec rspec',
+          'exec':    'bundle exec ruby',
+        }
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'ruby', frameworks }
+  } catch { return null }
+}
+
+// ─── Go detector ────────────────────────────────────────────────────────────
+function readGo(folderPath: string): ScannedProject | null {
+  const gomodPath = path.join(folderPath, 'go.mod')
+  if (!fs.existsSync(gomodPath)) return null
+  try {
+    const content = fs.readFileSync(gomodPath, 'utf-8')
+    const moduleMatch = content.match(/^module\s+(.+)/m)
+    const name = moduleMatch ? path.basename(moduleMatch[1].trim()) : path.basename(folderPath)
+    const scripts: Record<string, string> = {
+      'run':   'go run .',
+      'build': 'go build -o bin/app .',
+      'test':  'go test ./...',
+      'tidy':  'go mod tidy',
+      'vet':   'go vet ./...',
+    }
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'go', frameworks: ['go'] }
+  } catch { return null }
+}
+
+// ─── Rust detector ──────────────────────────────────────────────────────────
+function readRust(folderPath: string): ScannedProject | null {
+  const cargoPath = path.join(folderPath, 'Cargo.toml')
+  if (!fs.existsSync(cargoPath)) return null
+  try {
+    const content = fs.readFileSync(cargoPath, 'utf-8')
+    const nameMatch = content.match(/^\s*name\s*=\s*["']([^"']+)["']/m)
+    const name = nameMatch ? nameMatch[1] : path.basename(folderPath)
+    const scripts: Record<string, string> = {
+      'run':     'cargo run',
+      'build':   'cargo build',
+      'release': 'cargo build --release',
+      'test':    'cargo test',
+      'check':   'cargo check',
+      'clippy':  'cargo clippy',
+    }
+    return { id: uid(), name, path: folderPath, scripts, projectType: 'rust', frameworks: ['rust'] }
+  } catch { return null }
+}
+
 function detectProject(folderPath: string): ScannedProject | null {
-  return readNpm(folderPath) || readMaven(folderPath) || readGradle(folderPath) || readDocker(folderPath)
+  return readNpm(folderPath)
+    || readMaven(folderPath)
+    || readGradle(folderPath)
+    || readDocker(folderPath)
+    || readComposer(folderPath)
+    || readPython(folderPath)
+    || readRuby(folderPath)
+    || readGo(folderPath)
+    || readRust(folderPath)
 }
 
 function scanFolder(folderPath: string): ScannedProject[] {

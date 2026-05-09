@@ -628,6 +628,7 @@ ipcMain.handle('kill-port', (_e, port: number): Promise<{ success: boolean; erro
 
 // ─── Shell: open URL in default browser ───────────────────────────────────
 ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url))
+ipcMain.handle('open-in-finder', (_e, folderPath: string) => shell.openPath(folderPath))
 
 // ─── Node: uninstall version ───────────────────────────────────────────────
 ipcMain.handle('node-uninstall-version', (_e, version: string) => {
@@ -977,6 +978,50 @@ ipcMain.handle('kubectl-scale', async (_e, deployment: string, namespace: string
   if (replicas < 0 || replicas > 50) return { error: 'Invalid replicas count' }
   try {
     await runCmd(bin, ['scale', 'deployment', deployment, `--replicas=${replicas}`, '-n', namespace])
+    return { success: true }
+  } catch (e: unknown) {
+    return { error: (e as Error).message }
+  }
+})
+
+// ─── Window controls ───────────────────────────────────────────────────────
+ipcMain.handle('window-maximize', () => {
+  if (!win) return
+  if (process.platform === 'darwin') {
+    win.isFullScreen() ? win.setFullScreen(false) : win.setFullScreen(true)
+  } else {
+    win.isMaximized() ? win.unmaximize() : win.maximize()
+  }
+})
+ipcMain.handle('window-minimize', () => win?.minimize())
+ipcMain.handle('window-close',    () => win?.close())
+
+// ─── Editor detection & open ──────────────────────────────────────────────
+const EDITORS = [
+  { id: 'cursor',    label: 'Cursor',          app: 'Cursor' },
+  { id: 'code',      label: 'VS Code',          app: 'Visual Studio Code' },
+  { id: 'zed',       label: 'Zed',              app: 'Zed' },
+  { id: 'webstorm',  label: 'WebStorm',         app: 'WebStorm' },
+  { id: 'idea',      label: 'IntelliJ IDEA',    app: 'IntelliJ IDEA' },
+  { id: 'idea-ce',   label: 'IDEA Community',   app: 'IntelliJ IDEA CE' },
+  { id: 'subl',      label: 'Sublime Text',     app: 'Sublime Text' },
+  { id: 'nova',      label: 'Nova',             app: 'Nova' },
+  { id: 'xcode',     label: 'Xcode',            app: 'Xcode' },
+  { id: 'rubymine',  label: 'RubyMine',         app: 'RubyMine' },
+  { id: 'pycharm',   label: 'PyCharm',          app: 'PyCharm' },
+  { id: 'goland',    label: 'GoLand',           app: 'GoLand' },
+]
+
+ipcMain.handle('detect-editors', () => {
+  const appDirs = ['/Applications', path.join(os.homedir(), 'Applications')]
+  return EDITORS.filter(e =>
+    appDirs.some(dir => fs.existsSync(path.join(dir, `${e.app}.app`)))
+  ).map(({ id, label, app }) => ({ id, label, bin: app }))
+})
+
+ipcMain.handle('open-in-editor', (_e, projectPath: string, bin: string) => {
+  try {
+    spawn('open', ['-a', bin, projectPath], { detached: true, stdio: 'ignore' }).unref()
     return { success: true }
   } catch (e: unknown) {
     return { error: (e as Error).message }

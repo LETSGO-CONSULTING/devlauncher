@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Shell / system ────────────────────────────────────────
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  openInFinder: (folderPath: string) => ipcRenderer.invoke('open-in-finder', folderPath),
   killPort: (port: number) => ipcRenderer.invoke('kill-port', port),
   getProcessPids: () => ipcRenderer.invoke('get-process-pids'),
   sendInput: (projectId: string, scriptKey: string, text: string) =>

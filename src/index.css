@@ -415,6 +415,7 @@ button:active { transform: scale(0.97); }
   transition: background 0.12s;
 }
 .open-with-item:hover { background: var(--surface2); color: var(--text); }
+.open-with-finder { border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 2px; }
 
 /* ── Titlebar drag strip (non-Projects tabs) ─────────────── */
 .titlebar-drag-strip {

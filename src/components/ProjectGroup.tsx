@@ -89,16 +89,16 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
               {openWithTarget === 'group' && (
                 <div className="open-with-menu">
                   <div className="open-with-label">Open folder in…</div>
-                  {editors.length > 0
-                    ? editors.map(ed => (
-                      <button
-                        key={ed.id}
-                        className="open-with-item"
-                        onClick={() => { window.electronAPI.openInEditor(group.path, ed.bin); setOpenWithTarget(null) }}
-                      >{ed.label}</button>
-                    ))
-                    : <div className="open-with-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No editors found</div>
-                  }
+                  <button className="open-with-item open-with-finder"
+                    onClick={() => { window.electronAPI.openInFinder(group.path); setOpenWithTarget(null) }}
+                  >🗂 Finder</button>
+                  {editors.map(ed => (
+                    <button
+                      key={ed.id}
+                      className="open-with-item"
+                      onClick={() => { window.electronAPI.openInEditor(group.path, ed.bin); setOpenWithTarget(null) }}
+                    >{ed.label}</button>
+                  ))}
                 </div>
               )}
             </div>
@@ -161,16 +161,16 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                   {openWithTarget === project.id && (
                     <div className="open-with-menu">
                       <div className="open-with-label">Open in…</div>
-                      {editors.length > 0
-                        ? editors.map(ed => (
-                          <button
-                            key={ed.id}
-                            className="open-with-item"
-                            onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithTarget(null) }}
-                          >{ed.label}</button>
-                        ))
-                        : <div className="open-with-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No editors found</div>
-                      }
+                      <button className="open-with-item open-with-finder"
+                        onClick={() => { window.electronAPI.openInFinder(project.path); setOpenWithTarget(null) }}
+                      >🗂 Finder</button>
+                      {editors.map(ed => (
+                        <button
+                          key={ed.id}
+                          className="open-with-item"
+                          onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithTarget(null) }}
+                        >{ed.label}</button>
+                      ))}
                     </div>
                   )}
                 </div>

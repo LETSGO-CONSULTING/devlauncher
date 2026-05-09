@@ -45,7 +45,13 @@ declare global {
       kubectlPodLogs: (pod: string, ns: string) => Promise<{ key?: string; error?: string }>
       kubectlScale: (deployment: string, ns: string, replicas: number) => Promise<{ success?: boolean; error?: string }>
       openExternal: (url: string) => Promise<void>
+      openInFinder: (folderPath: string) => Promise<string>
       killPort: (port: number) => Promise<{ success: boolean; error?: string }>
+      detectEditors: () => Promise<Array<{ id: string; label: string; bin: string }>>
+      openInEditor: (projectPath: string, bin: string) => Promise<{ success?: boolean; error?: string }>
+      windowMaximize: () => Promise<void>
+      windowMinimize: () => Promise<void>
+      windowClose:    () => Promise<void>
       getProcessPids: () => Promise<Record<string, number>>
       sendInput: (projectId: string, scriptKey: string, text: string) => Promise<{ success?: boolean; error?: string }>
       licenseGet: () => Promise<{ tier: string; expiresAt?: string | null; expired?: boolean }>

@@ -136,31 +136,32 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
             <div
               className={`sub-project-header${isOpen ? ' open' : ''}`}
               onClick={() => toggle(project.id)}
-              style={{ cursor: 'pointer', userSelect: 'none', justifyContent: 'space-between' }}
+              style={{ cursor: 'pointer', userSelect: 'none' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Left: chevron + icon + name + Open btn */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{
-                  display: 'inline-block', fontSize: 9,
-                  color: 'var(--text-muted)',
+                  fontSize: 9, color: 'var(--text-muted)',
                   transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                   transition: 'transform 0.18s ease',
+                  flexShrink: 0,
                 }}>▶</span>
 
-                {projFw && <TechIcon framework={projFw} size={15} />}
+                {projFw && <TechIcon framework={projFw} size={14} />}
 
-                <span style={{ color: 'var(--text-dim)', fontWeight: 600, fontSize: 11 }}>
+                <span style={{ fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>
                   {project.name}
                 </span>
 
-                {/* Open-with button — inline next to project name */}
-                <div style={{ position: 'relative' }}>
+                {/* Open-with — right next to name */}
+                <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                   <button
                     className="open-with-btn"
                     title="Open in editor"
-                    onClick={(e) => { e.stopPropagation(); setOpenWithTarget(openWithTarget === project.id ? null : project.id) }}
+                    onClick={() => setOpenWithTarget(openWithTarget === project.id ? null : project.id)}
                   >⎋ Open</button>
                   {openWithTarget === project.id && (
-                    <div className="open-with-menu" onClick={e => e.stopPropagation()}>
+                    <div className="open-with-menu">
                       <div className="open-with-label">Open in…</div>
                       {editors.length > 0
                         ? editors.map(ed => (
@@ -175,20 +176,21 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                     </div>
                   )}
                 </div>
-
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                  · {Object.keys(project.scripts).length} scripts
-                </span>
               </div>
 
-              {projectRunning && (
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: 'var(--green)', display: 'inline-block',
-                  animation: 'pulse-green 1.8s ease-in-out infinite',
-                  marginRight: 4,
-                }} />
-              )}
+              {/* Right: script count + running dot */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {Object.keys(project.scripts).length} scripts
+                </span>
+                {projectRunning && (
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: 'var(--green)', flexShrink: 0,
+                    animation: 'pulse-green 1.8s ease-in-out infinite',
+                  }} />
+                )}
+              </div>
             </div>
 
             {isOpen && (

@@ -306,21 +306,25 @@ button:active { transform: scale(0.97); }
 .sub-project-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 9px 20px 7px;
+  padding: 9px 14px 9px 16px;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
   border-top: 1px solid var(--card-border);
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(10, 18, 35, 0.55);
+  transition: background 0.15s;
 }
+
+.sub-project-header:hover { background: rgba(20, 32, 52, 0.7); }
 
 .sub-project-header:first-child { border-top: none; }
 
 .sub-project-header.open {
-  background: var(--surface);
+  background: rgba(26, 38, 60, 0.9);
   color: var(--text);
-  border-bottom: 1px solid var(--card-border);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 /* ── Group header actions cluster ───────────────────────── */

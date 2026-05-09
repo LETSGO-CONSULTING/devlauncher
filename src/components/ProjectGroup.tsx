@@ -152,45 +152,43 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
                   {project.name}
                 </span>
 
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                  · {Object.keys(project.scripts).length} scripts
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {projectRunning && (
-                  <span style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: 'var(--green)', display: 'inline-block',
-                    animation: 'pulse-green 1.8s ease-in-out infinite',
-                  }} />
-                )}
-                {/* Open this sub-project with editor */}
+                {/* Open-with button — inline next to project name */}
                 <div style={{ position: 'relative' }}>
                   <button
                     className="open-with-btn"
                     title="Open in editor"
                     onClick={(e) => { e.stopPropagation(); setOpenWithTarget(openWithTarget === project.id ? null : project.id) }}
                   >⎋ Open</button>
-                  {openWithTarget === project.id && editors.length > 0 && (
-                    <div className="open-with-menu" style={{ right: 0, left: 'auto' }} onClick={e => e.stopPropagation()}>
+                  {openWithTarget === project.id && (
+                    <div className="open-with-menu" onClick={e => e.stopPropagation()}>
                       <div className="open-with-label">Open in…</div>
-                      {editors.map(ed => (
-                        <button
-                          key={ed.id}
-                          className="open-with-item"
-                          onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithTarget(null) }}
-                        >{ed.label}</button>
-                      ))}
-                    </div>
-                  )}
-                  {openWithTarget === project.id && editors.length === 0 && (
-                    <div className="open-with-menu" style={{ right: 0, left: 'auto' }} onClick={e => e.stopPropagation()}>
-                      <div className="open-with-label" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No editors found</div>
+                      {editors.length > 0
+                        ? editors.map(ed => (
+                          <button
+                            key={ed.id}
+                            className="open-with-item"
+                            onClick={() => { window.electronAPI.openInEditor(project.path, ed.bin); setOpenWithTarget(null) }}
+                          >{ed.label}</button>
+                        ))
+                        : <div className="open-with-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No editors found</div>
+                      }
                     </div>
                   )}
                 </div>
+
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  · {Object.keys(project.scripts).length} scripts
+                </span>
               </div>
+
+              {projectRunning && (
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: 'var(--green)', display: 'inline-block',
+                  animation: 'pulse-green 1.8s ease-in-out infinite',
+                  marginRight: 4,
+                }} />
+              )}
             </div>
 
             {isOpen && (

@@ -186,7 +186,7 @@ button:active { transform: scale(0.97); }
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   align-items: start;
 }

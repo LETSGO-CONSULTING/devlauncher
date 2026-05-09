@@ -317,6 +317,12 @@ button:active { transform: scale(0.97); }
 
 .sub-project-header:first-child { border-top: none; }
 
+.sub-project-header.open {
+  background: var(--surface);
+  color: var(--text);
+  border-bottom: 1px solid var(--card-border);
+}
+
 /* ── Group header actions cluster ───────────────────────── */
 .group-header-actions {
   display: flex;
@@ -423,7 +429,7 @@ button:active { transform: scale(0.97); }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 20px;
+  padding: 10px 20px 10px 40px;
   border-top: 1px solid rgba(30,45,61,0.5);
   transition: background 0.15s;
 }

@@ -134,7 +134,7 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
         return (
           <div key={project.id} className="sub-project-section">
             <div
-              className="sub-project-header"
+              className={`sub-project-header${isOpen ? ' open' : ''}`}
               onClick={() => toggle(project.id)}
               style={{ cursor: 'pointer', userSelect: 'none', justifyContent: 'space-between' }}
             >

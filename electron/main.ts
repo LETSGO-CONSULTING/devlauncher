@@ -606,10 +606,10 @@ let win: BrowserWindow | null = null
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1100,
-    height: 750,
-    minWidth: 800,
-    minHeight: 600,
+    width: 1760,
+    height: 1200,
+    minWidth: 1100,
+    minHeight: 750,
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0b1120',
     webPreferences: {
@@ -1325,13 +1325,15 @@ ipcMain.handle('open-in-editor', (_e, projectPath: string, bin: string) => {
 type NodeRole = 'frontend' | 'backend' | 'fullstack' | 'database' | 'cache' | 'unknown'
 
 interface GraphNode {
-  id:       string
-  label:    string
-  role:     NodeRole
-  path:     string
-  port?:    number
-  tech:     string[]
-  envVars:  Record<string, string>
+  id:        string
+  label:     string
+  role:      NodeRole
+  path:      string
+  port?:     number
+  tech:      string[]
+  envVars:   Record<string, string>
+  groupId?:  string
+  groupName?: string
 }
 
 interface GraphEdge {
@@ -1433,13 +1435,15 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
       const port     = extractPort(envVars)
 
       nodes.push({
-        id:      project.id,
-        label:   project.name,
+        id:        project.id,
+        label:     project.name,
         role,
-        path:    project.path,
+        path:      project.path,
         port,
-        tech:    project.frameworks ?? [],
+        tech:      project.frameworks ?? [],
         envVars,
+        groupId:   group.id,
+        groupName: group.name,
       })
     }
   }

@@ -1433,6 +1433,10 @@ const PKG_TECH_MAP: Array<{ pkgs: string[]; tech: string }> = [
   { pkgs: ['aws-sdk','@aws-sdk/client-s3'],                          tech: 's3compatible'},
   { pkgs: ['minio'],                                                 tech: 's3compatible'},
   { pkgs: ['swagger-ui-express','@nestjs/swagger'],                  tech: 'swagger'    },
+  { pkgs: ['axios','@tanstack/react-query'],                         tech: 'http'       },
+  { pkgs: ['google-auth-library','passport-google-oauth20'],         tech: 'google'     },
+  { pkgs: ['nodemailer','@nestjs/mailer'],                           tech: 'mail'       },
+  { pkgs: ['bcrypt','bcryptjs'],                                     tech: 'bcrypt'     },
 ]
 
 function scanPackageDeps(projectPath: string): string[] {
@@ -1473,7 +1477,7 @@ function parseDockerCompose(dirPath: string): DockerComposeService[] {
           if (m) cur.image = m[1].trim().replace(/["']/g, '')
         } else if (indent >= 6 && cur) {
           const m = raw.trim().match(/^-\s*["']?(\d+):(\d+)["']?/)
-          if (m) (cur.ports ??= []).push(parseInt(m[2], 10))
+          if (m) (cur.ports ??= []).push(parseInt(m[1], 10)) // m[1]=host port, m[2]=container port
         }
       }
       if (cur?.name && cur.image) services.push(cur as DockerComposeService)

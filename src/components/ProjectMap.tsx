@@ -71,6 +71,10 @@ const TECH: Record<string, TechStyle> = {
   websockets:   { bg:'rgba(139,92,246,.09)',   border:'rgba(139,92,246,.25)',   text:'#c4b5fd', icon:'⚡', label:'WebSockets'    },
   queue:        { bg:'rgba(245,158,11,.09)',   border:'rgba(245,158,11,.25)',   text:'#fcd34d', icon:'◈',  label:'Queue'         },
   swagger:      { bg:'rgba(133,230,56,.09)',   border:'rgba(133,230,56,.25)',   text:'#a3e635', icon:'📄', label:'Swagger'       },
+  http:         { bg:'rgba(255,255,255,.05)',  border:'rgba(255,255,255,.10)',  text:'#94a3b8', icon:'◈',  label:'Axios'         },
+  google:       { bg:'rgba(234,67,53,.09)',    border:'rgba(234,67,53,.25)',    text:'#fca5a5', icon:'G',  label:'Google Auth'   },
+  mail:         { bg:'rgba(59,130,246,.09)',   border:'rgba(59,130,246,.25)',   text:'#93c5fd', icon:'✉',  label:'Mailer'        },
+  bcrypt:       { bg:'rgba(255,255,255,.04)',  border:'rgba(255,255,255,.08)',  text:'#64748b', icon:'🔒', label:'Bcrypt'        },
 }
 
 function getTech(t: string): TechStyle {

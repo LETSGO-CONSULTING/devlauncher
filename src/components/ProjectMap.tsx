@@ -487,7 +487,7 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export default function ProjectMap() {
+export default function ProjectMap({ focusGroupId }: { focusGroupId?: string | null }) {
   const [allNodes, setAllNodes] = useState<GraphNode[]>([])
   const [allEdges, setAllEdges] = useState<GraphEdge[]>([])
   const [loading, setLoading]   = useState(true)
@@ -500,7 +500,9 @@ export default function ProjectMap() {
         const graph = await window.electronAPI.getProjectGraph() as { nodes: GraphNode[]; edges: GraphEdge[] }
         setAllNodes(graph.nodes)
         setAllEdges(graph.edges)
-        setActiveTab(graph.nodes.find(n => n.groupId)?.groupId ?? null)
+        // If launched from a project button, jump straight to that group
+        const defaultTab = focusGroupId ?? graph.nodes.find(n => n.groupId)?.groupId ?? null
+        setActiveTab(defaultTab)
       } catch (e) {
         setError(String(e))
       } finally {
@@ -508,6 +510,11 @@ export default function ProjectMap() {
       }
     })()
   }, [])
+
+  // When parent changes focusGroupId (e.g. user clicks map button on another project)
+  useEffect(() => {
+    if (focusGroupId) setActiveTab(focusGroupId)
+  }, [focusGroupId])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#334155', fontSize: 12 }}>
@@ -520,14 +527,18 @@ export default function ProjectMap() {
     </div>
   )
 
-  const groups: { id: string; name: string }[] = []
+  // When focusGroupId set → show only that group's tab; otherwise show all
+  const allGroups: { id: string; name: string }[] = []
   const seen = new Set<string>()
   for (const n of allNodes) {
     if (n.groupId && !seen.has(n.groupId)) {
       seen.add(n.groupId)
-      groups.push({ id: n.groupId, name: n.groupName ?? n.groupId })
+      allGroups.push({ id: n.groupId, name: n.groupName ?? n.groupId })
     }
   }
+  const groups = focusGroupId
+    ? allGroups.filter(g => g.id === focusGroupId)
+    : allGroups
 
   return (
     <div style={{ height: '100%', width: '100%', background: '#090e1a', display: 'flex', flexDirection: 'column' }}>

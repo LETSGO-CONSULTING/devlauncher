@@ -90,6 +90,7 @@ export default function App() {
   const [overlayHeight, setOverlayHeight] = useState(320)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const [mapFocusGroupId, setMapFocusGroupId] = useState<string | null>(null)
 
   // Close a console tab AND stop its process
   const closeAndStop = (key: string) => {
@@ -170,7 +171,10 @@ export default function App() {
         onAddProject={handleAdd}
         onRemove={handleRemove}
         activeTab={sidebarTab}
-        onTabChange={(tab) => setSidebarTab(tab as 'dashboard' | 'projects' | 'map' | 'sdks' | 'infra' | 'console')}
+        onTabChange={(tab) => {
+          setSidebarTab(tab as 'dashboard' | 'projects' | 'map' | 'sdks' | 'infra' | 'console')
+          if (tab === 'map') setMapFocusGroupId(null) // sidebar nav = show all
+        }}
         onSelectGroup={(id) => { setSelectedGroupId(id); setSidebarTab('projects') }}
         selectedGroupId={selectedGroupId}
       />
@@ -200,7 +204,7 @@ export default function App() {
         {/* ── Map tab ────────────────────────────────────────────────── */}
         {sidebarTab === 'map' && (
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <ProjectMap />
+            <ProjectMap focusGroupId={mapFocusGroupId} />
           </div>
         )}
 
@@ -238,7 +242,7 @@ export default function App() {
                       group={g}
                       onRemove={() => handleRemove(g.id)}
                       selected={selectedGroupId === g.id}
-                      onShowMap={() => setSidebarTab('map')}
+                      onShowMap={() => { setSidebarTab('map'); setMapFocusGroupId(g.id) }}
                     />
                   ))}
                 </div>

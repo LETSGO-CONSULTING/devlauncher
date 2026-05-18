@@ -118,28 +118,87 @@ function makeNodeEl(n: GraphNode): Node {
   }
 }
 
+// Role → column index (left to right: frontend → fullstack → backend → db/cache at bottom)
+const ROLE_COL: Record<NodeRole, number> = {
+  frontend:  0,
+  fullstack: 1,
+  backend:   2,
+  unknown:   1,
+  database:  99, // bottom row
+  cache:     99,
+}
+
 function buildLayout(rawNodes: GraphNode[], rawEdges: GraphEdge[]): { nodes: Node[]; edges: Edge[] } {
   const flowNodes: Node[] = []
   const flowEdges: Edge[] = []
 
-  // Split: project nodes vs DB/cache nodes
   const projectNodes = rawNodes.filter(n => !n.id.startsWith('db-'))
   const dbNodes      = rawNodes.filter(n => n.id.startsWith('db-'))
 
-  // Project nodes — horizontal row at top
-  projectNodes.forEach((n, i) => {
-    const node = makeNodeEl(n)
-    node.position = { x: i * (NODE_W + GRP_GAP_X), y: 0 }
-    flowNodes.push(node)
-  })
+  // Bucket project nodes by column
+  const cols = new Map<number, GraphNode[]>()
+  for (const n of projectNodes) {
+    const col = ROLE_COL[n.role]
+    if (!cols.has(col)) cols.set(col, [])
+    cols.get(col)!.push(n)
+  }
 
-  // DB/cache nodes — row below, centered under projects
-  const totalW = Math.max(projectNodes.length - 1, 0) * (NODE_W + GRP_GAP_X)
-  const dbSpacing = NODE_W + GRP_GAP_X
-  const dbStartX  = (totalW - (dbNodes.length - 1) * dbSpacing) / 2
+  // Assign positions — each column stacks vertically
+  const COL_W    = NODE_W + GRP_GAP_X
+  const sortedCols = [...cols.keys()].sort((a, b) => a - b)
+
+  // Remap sparse col indices to dense 0,1,2…
+  const colIndex = new Map(sortedCols.map((c, i) => [c, i]))
+  const totalCols = sortedCols.length
+
+  for (const [colKey, nodes] of cols) {
+    const ci = colIndex.get(colKey)!
+    // Center the column horizontally within its slot
+    const cx = ci * COL_W
+
+    // Column label node
+    if (nodes.length > 0) {
+      const roleLabel = nodes[0].role.toUpperCase()
+      const col = ROLE_COLOR[nodes[0].role]
+      flowNodes.push({
+        id: `col-label-${colKey}`,
+        type: 'default',
+        position: { x: cx + (NODE_W - 100) / 2, y: -38 },
+        selectable: false, draggable: false,
+        data: {
+          label: (
+            <span style={{ fontSize: 10, fontWeight: 700, color: col.border, letterSpacing: '0.07em' }}>
+              {roleLabel}
+            </span>
+          ),
+        },
+        style: {
+          background: `${col.border}12`,
+          border: `1px solid ${col.border}30`,
+          borderRadius: 6, padding: '2px 10px',
+          boxShadow: 'none', width: 100,
+          pointerEvents: 'none',
+        },
+      })
+    }
+
+    nodes.forEach((n, ni) => {
+      const node = makeNodeEl(n)
+      node.position = { x: cx, y: ni * (NODE_H + NODE_GAP_Y) }
+      flowNodes.push(node)
+    })
+  }
+
+  // DB/cache row — centered below all project columns
+  const projectRowW = Math.max(totalCols - 1, 0) * COL_W + NODE_W
+  const dbRowW      = Math.max(dbNodes.length - 1, 0) * (NODE_W + GRP_GAP_X)
+  const dbStartX    = (projectRowW - dbRowW) / 2
+  const maxColH     = Math.max(...[...cols.values()].map(ns => ns.length), 1)
+  const dbY         = maxColH * (NODE_H + NODE_GAP_Y) + 80
+
   dbNodes.forEach((n, i) => {
     const node = makeNodeEl(n)
-    node.position = { x: dbStartX + i * dbSpacing, y: NODE_H + 120 }
+    node.position = { x: dbStartX + i * (NODE_W + GRP_GAP_X), y: dbY }
     flowNodes.push(node)
   })
 

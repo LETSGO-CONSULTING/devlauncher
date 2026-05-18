@@ -80,153 +80,69 @@ const DB_COL_X    = 9999 // resolved at runtime
 
 // ─── Build flow nodes+edges from graph data ────────────────────────────────
 
+function makeNodeEl(n: GraphNode): Node {
+  const col = ROLE_COLOR[n.role]
+  return {
+    id:   n.id,
+    type: 'default',
+    position: { x: 0, y: 0 }, // overridden below
+    data: {
+      role: n.role,
+      graphNode: n,
+      label: (
+        <div style={{ textAlign: 'center', padding: '6px 8px' }}>
+          <div style={{ fontSize: 20, marginBottom: 2 }}>{ROLE_ICON[n.role]}</div>
+          <div style={{ fontWeight: 700, fontSize: 12, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
+          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 1 }}>
+            {n.role}{n.port ? ` · :${n.port}` : ''}
+          </div>
+          <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
+            {n.tech.slice(0, 3).map(t => (
+              <span key={t} style={{
+                fontSize: 9, padding: '1px 4px',
+                background: `${col.border}22`, border: `1px solid ${col.border}44`,
+                borderRadius: 4, color: col.text,
+              }}>{t}</span>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    style: {
+      width: NODE_W,
+      background: col.bg, border: `1.5px solid ${col.border}`,
+      borderRadius: 12, color: col.text,
+      boxShadow: `0 0 14px ${col.glow}, 0 0 4px ${col.border}60`,
+      animation: 'nodePulse 3s ease-in-out infinite',
+    },
+  }
+}
+
 function buildLayout(rawNodes: GraphNode[], rawEdges: GraphEdge[]): { nodes: Node[]; edges: Edge[] } {
   const flowNodes: Node[] = []
   const flowEdges: Edge[] = []
 
-  // Separate project nodes (have groupId) from external DB/cache nodes
-  const projectNodes = rawNodes.filter(n => n.groupId)
-  const externalNodes = rawNodes.filter(n => !n.groupId)
+  // Split: project nodes vs DB/cache nodes
+  const projectNodes = rawNodes.filter(n => !n.id.startsWith('db-'))
+  const dbNodes      = rawNodes.filter(n => n.id.startsWith('db-'))
 
-  // Group project nodes by groupId
-  const groups = new Map<string, { name: string; nodes: GraphNode[] }>()
-  for (const n of projectNodes) {
-    const gid = n.groupId!
-    if (!groups.has(gid)) groups.set(gid, { name: n.groupName ?? gid, nodes: [] })
-    groups.get(gid)!.nodes.push(n)
-  }
-
-  const groupList = [...groups.entries()]
-  let cursorX = 0
-
-  // Emit a background + project nodes per group
-  for (const [gid, { name, nodes }] of groupList) {
-    const colH = GRP_PAD * 2 + nodes.length * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y
-    const colW = GRP_PAD * 2 + NODE_W
-
-    // Group background node
-    flowNodes.push({
-      id:   `grp-${gid}`,
-      type: 'group',
-      position: { x: cursorX, y: 0 },
-      data: { label: name },
-      style: {
-        width:  colW,
-        height: colH,
-        background: '#ffffff04',
-        border: '1px solid #1e2d45',
-        borderRadius: 16,
-      },
-    })
-
-    // Group label node (title above container)
-    flowNodes.push({
-      id:       `grp-label-${gid}`,
-      type:     'default',
-      position: { x: cursorX + GRP_PAD, y: -32 },
-      selectable: false,
-      draggable:  false,
-      data: {
-        label: (
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {name}
-          </span>
-        ),
-      },
-      style: {
-        background: 'transparent', border: 'none', boxShadow: 'none',
-        padding: 0, pointerEvents: 'none',
-      },
-    })
-
-    // Project nodes inside the group
-    nodes.forEach((n, ni) => {
-      const col = ROLE_COLOR[n.role]
-      const ny  = GRP_PAD + ni * (NODE_H + NODE_GAP_Y)
-
-      flowNodes.push({
-        id:       n.id,
-        type:     'default',
-        parentId: `grp-${gid}`,
-        extent:   'parent',
-        position: { x: GRP_PAD, y: ny },
-        data: {
-          role:      n.role,
-          graphNode: n,
-          label: (
-            <div style={{ textAlign: 'center', padding: '6px 8px' }}>
-              <div style={{ fontSize: 20, marginBottom: 2 }}>{ROLE_ICON[n.role]}</div>
-              <div style={{ fontWeight: 700, fontSize: 12, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
-              <div style={{ fontSize: 10, color: '#6b7280', marginTop: 1 }}>
-                {n.role}{n.port ? ` · :${n.port}` : ''}
-              </div>
-              <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
-                {n.tech.slice(0, 3).map(t => (
-                  <span key={t} style={{
-                    fontSize: 9, padding: '1px 4px',
-                    background: `${col.border}22`, border: `1px solid ${col.border}44`,
-                    borderRadius: 4, color: col.text,
-                  }}>{t}</span>
-                ))}
-              </div>
-            </div>
-          ),
-        },
-        style: {
-          width: NODE_W,
-          background: col.bg, border: `1.5px solid ${col.border}`,
-          borderRadius: 12, color: col.text,
-          boxShadow: `0 0 14px ${col.glow}, 0 0 4px ${col.border}60`,
-          animation: 'nodePulse 3s ease-in-out infinite',
-        },
-      })
-    })
-
-    cursorX += colW + GRP_GAP_X
-  }
-
-  // External DB/cache nodes — row below all groups
-  const totalGroupsW = cursorX - GRP_GAP_X
-  const extY = 420
-  externalNodes.forEach((n, ni) => {
-    const col = ROLE_COLOR[n.role]
-    const ex  = (totalGroupsW / Math.max(externalNodes.length, 1)) * ni + NODE_W / 2
-
-    flowNodes.push({
-      id:   n.id,
-      type: 'default',
-      position: { x: ex, y: extY },
-      data: {
-        role:      n.role,
-        graphNode: n,
-        label: (
-          <div style={{ textAlign: 'center', padding: '6px 8px' }}>
-            <div style={{ fontSize: 20, marginBottom: 2 }}>{ROLE_ICON[n.role]}</div>
-            <div style={{ fontWeight: 700, fontSize: 12, color: col.text }}>{n.label}</div>
-            <div style={{ fontSize: 10, color: '#6b7280', marginTop: 1 }}>{n.role}</div>
-            <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
-              {n.tech.slice(0, 2).map(t => (
-                <span key={t} style={{
-                  fontSize: 9, padding: '1px 4px',
-                  background: `${col.border}22`, border: `1px solid ${col.border}44`,
-                  borderRadius: 4, color: col.text,
-                }}>{t}</span>
-              ))}
-            </div>
-          </div>
-        ),
-      },
-      style: {
-        width: NODE_W,
-        background: col.bg, border: `1.5px solid ${col.border}`,
-        borderRadius: 12, color: col.text,
-        boxShadow: `0 0 14px ${col.glow}, 0 0 4px ${col.border}60`,
-        animation: 'nodePulse 3s ease-in-out infinite',
-      },
-    })
+  // Project nodes — horizontal row at top
+  projectNodes.forEach((n, i) => {
+    const node = makeNodeEl(n)
+    node.position = { x: i * (NODE_W + GRP_GAP_X), y: 0 }
+    flowNodes.push(node)
   })
 
-  // Edges
+  // DB/cache nodes — row below, centered under projects
+  const totalW = Math.max(projectNodes.length - 1, 0) * (NODE_W + GRP_GAP_X)
+  const dbSpacing = NODE_W + GRP_GAP_X
+  const dbStartX  = (totalW - (dbNodes.length - 1) * dbSpacing) / 2
+  dbNodes.forEach((n, i) => {
+    const node = makeNodeEl(n)
+    node.position = { x: dbStartX + i * dbSpacing, y: NODE_H + 120 }
+    flowNodes.push(node)
+  })
+
   rawEdges.forEach((e, i) => {
     flowEdges.push({
       id: `e-${i}`, source: e.source, target: e.target,
@@ -468,39 +384,100 @@ const CSS = `
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export default function ProjectMap() {
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [loading, setLoading]            = useState(true)
-  const [error, setError]                = useState<string | null>(null)
+// ─── Per-group canvas ──────────────────────────────────────────────────────
+
+function GroupCanvas({
+  groupId, allNodes, allEdges,
+}: { groupId: string; allNodes: GraphNode[]; allEdges: GraphEdge[] }) {
+  const groupNodes = allNodes.filter(n => n.groupId === groupId)
+  const groupEdgeTargets = new Set(groupNodes.map(n => n.id))
+  const groupEdges = allEdges.filter(e => groupEdgeTargets.has(e.source) && groupEdgeTargets.has(e.target))
+
+  const { nodes: fn, edges: fe } = buildLayout(groupNodes, groupEdges)
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(fn)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(fe)
   const [selected, setSelected]          = useState<GraphNode | null>(null)
-  const [rawNodes, setRawNodes]          = useState<GraphNode[]>([])
 
   const onConnect = useCallback(
     (params: Connection) => setEdges(eds => addEdge({ ...params, type: 'energy', data: { label: 'custom' } }, eds)),
     [setEdges],
   )
 
+  const onNodeClick: NodeMouseHandler = useCallback((_evt, node) => {
+    const raw = groupNodes.find(n => n.id === node.id)
+    if (raw) setSelected(raw)
+  }, [groupNodes])
+
+  const projectCount    = groupNodes.filter(n => n.groupId && !n.id.startsWith('db-')).length
+  const connectionCount = groupEdges.length
+
+  return (
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative' }}>
+        {/* Stats bar */}
+        <div style={{
+          position: 'absolute', top: 12, left: 12, zIndex: 10,
+          display: 'flex', gap: 8, alignItems: 'center',
+          background: '#0b112099', backdropFilter: 'blur(8px)',
+          border: '1px solid #1e2d45', borderRadius: 8, padding: '5px 10px',
+        }}>
+          <span style={{ fontSize: 11, color: '#64748b' }}>{projectCount} services</span>
+          <span style={{ fontSize: 11, color: '#374151' }}>·</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>{connectionCount} connections</span>
+        </div>
+
+        <ReactFlow
+          nodes={nodes} edges={edges}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onPaneClick={() => setSelected(null)}
+          fitView fitViewOptions={{ padding: 0.2 }}
+          colorMode="dark"
+          defaultEdgeOptions={{ type: 'energy' }}
+        >
+          <Background color="#1e2d4530" gap={28} size={1} />
+          <Controls style={{ background: '#0f1e35cc', border: '1px solid #1e2d45', borderRadius: 8 }} />
+          <MiniMap
+            style={{ background: '#0b1120', border: '1px solid #1e2d45', borderRadius: 8 }}
+            nodeColor={(n) => ROLE_COLOR[(n.data as { role?: NodeRole }).role ?? 'unknown'].border}
+            maskColor="#0b112088"
+          />
+        </ReactFlow>
+      </div>
+      {selected && <DetailPanel node={selected} onClose={() => setSelected(null)} />}
+    </div>
+  )
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+
+export default function ProjectMap() {
+  const [allNodes, setAllNodes] = useState<GraphNode[]>([])
+  const [allEdges, setAllEdges] = useState<GraphEdge[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<string | null>(null)
+
   useEffect(() => {
     ;(async () => {
       try {
         const graph = await window.electronAPI.getProjectGraph() as { nodes: GraphNode[]; edges: GraphEdge[] }
-        setRawNodes(graph.nodes)
-        const { nodes: fn, edges: fe } = buildLayout(graph.nodes, graph.edges)
-        setNodes(fn)
-        setEdges(fe)
+        setAllNodes(graph.nodes)
+        setAllEdges(graph.edges)
+        // default to first group
+        const firstGroup = graph.nodes.find(n => n.groupId)?.groupId ?? null
+        setActiveTab(firstGroup)
       } catch (e) {
         setError(String(e))
       } finally {
         setLoading(false)
       }
     })()
-  }, [setNodes, setEdges])
-
-  const onNodeClick: NodeMouseHandler = useCallback((_evt, node) => {
-    const raw = rawNodes.find(n => n.id === node.id)
-    if (raw) setSelected(raw)
-  }, [rawNodes])
+  }, [])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280', fontSize: 13 }}>
@@ -513,55 +490,86 @@ export default function ProjectMap() {
     </div>
   )
 
-  const projectNodeCount = rawNodes.filter(n => n.groupId).length
-  const connectionCount  = edges.length
+  // Unique groups in order
+  const groups: { id: string; name: string }[] = []
+  const seen = new Set<string>()
+  for (const n of allNodes) {
+    if (n.groupId && !seen.has(n.groupId)) {
+      seen.add(n.groupId)
+      groups.push({ id: n.groupId, name: n.groupName ?? n.groupId })
+    }
+  }
 
   return (
     <div style={{ height: '100%', width: '100%', background: '#0b1120', display: 'flex', flexDirection: 'column' }}>
       <style>{CSS}</style>
 
       {/* Header */}
-      <div style={{ padding: '10px 20px', borderBottom: '1px solid #1e2d45', display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontWeight: 700, fontSize: 15, color: '#e2e8f0' }}>Project Map</span>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {(Object.entries(ROLE_COLOR) as [NodeRole, typeof ROLE_COLOR[NodeRole]][]).map(([role, c]) => (
-            <span key={role} style={{ fontSize: 11, color: c.text, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.border, boxShadow: `0 0 6px ${c.border}`, display: 'inline-block' }} />
-              {role}
-            </span>
-          ))}
+      <div style={{ borderBottom: '1px solid #1e2d45', flexShrink: 0 }}>
+        {/* Title + legend */}
+        <div style={{ padding: '8px 20px 0', display: 'flex', gap: 14, alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>Project Map</span>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {(Object.entries(ROLE_COLOR) as [NodeRole, typeof ROLE_COLOR[NodeRole]][]).map(([role, c]) => (
+              <span key={role} style={{ fontSize: 10, color: c.text, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.border, boxShadow: `0 0 5px ${c.border}`, display: 'inline-block' }} />
+                {role}
+              </span>
+            ))}
+          </div>
         </div>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#374151' }}>
-          {projectNodeCount} projects · {connectionCount} connections
-        </span>
+
+        {/* Group tabs */}
+        <div style={{ display: 'flex', gap: 0, paddingLeft: 12, paddingTop: 6, overflowX: 'auto' }}>
+          {groups.map(g => {
+            const active = activeTab === g.id
+            const nodeCount = allNodes.filter(n => n.groupId === g.id && !n.id.startsWith('db-')).length
+            return (
+              <button
+                key={g.id}
+                onClick={() => setActiveTab(g.id)}
+                style={{
+                  padding: '6px 16px',
+                  fontSize: 12, fontWeight: active ? 700 : 500,
+                  color: active ? '#e2e8f0' : '#64748b',
+                  background: active ? '#0f1e35' : 'transparent',
+                  border: 'none',
+                  borderTop: `2px solid ${active ? '#3b82f6' : 'transparent'}`,
+                  borderRight: '1px solid #1e2d4540',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {g.name}
+                <span style={{
+                  fontSize: 10, padding: '1px 5px', borderRadius: 8,
+                  background: active ? '#3b82f622' : '#ffffff0a',
+                  color: active ? '#93c5fd' : '#475569',
+                  border: `1px solid ${active ? '#3b82f640' : '#ffffff10'}`,
+                }}>{nodeCount}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Canvas + panel */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div style={{ flex: 1 }}>
-          <ReactFlow
-            nodes={nodes} edges={edges}
-            edgeTypes={edgeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onPaneClick={() => setSelected(null)}
-            fitView fitViewOptions={{ padding: 0.15 }}
-            colorMode="dark"
-            defaultEdgeOptions={{ type: 'energy' }}
-          >
-            <Background color="#1e2d4530" gap={28} size={1} />
-            <Controls style={{ background: '#0f1e35cc', border: '1px solid #1e2d45', borderRadius: 8 }} />
-            <MiniMap
-              style={{ background: '#0b1120', border: '1px solid #1e2d45', borderRadius: 8 }}
-              nodeColor={(n) => ROLE_COLOR[(n.data as { role?: NodeRole }).role ?? 'unknown'].border}
-              maskColor="#0b112088"
-            />
-          </ReactFlow>
+      {/* Canvas for active group */}
+      {activeTab && (
+        <GroupCanvas
+          key={activeTab}
+          groupId={activeTab}
+          allNodes={allNodes}
+          allEdges={allEdges}
+        />
+      )}
+
+      {groups.length === 0 && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151', fontSize: 13 }}>
+          No projects detected. Add a project first.
         </div>
-        {selected && <DetailPanel node={selected} onClose={() => setSelected(null)} />}
-      </div>
+      )}
     </div>
   )
 }

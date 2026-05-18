@@ -1426,15 +1426,18 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
   const groups = loadGroups()
   const nodes: GraphNode[] = []
   const edges: GraphEdge[]  = []
-  const dbNodes = new Map<string, string>() // label → node id
 
   for (const group of groups) {
-    for (const project of group.projects) {
-      const envVars  = parseEnvFile(project.path)
-      const role     = classifyRole(project.frameworks ?? [], envVars)
-      const port     = extractPort(envVars)
+    // DB/cache nodes are scoped per group — each group owns its own services
+    const groupDbNodes = new Map<string, string>() // label → node id
+    const groupNodes: GraphNode[] = []
 
-      nodes.push({
+    for (const project of group.projects) {
+      const envVars = parseEnvFile(project.path)
+      const role    = classifyRole(project.frameworks ?? [], envVars)
+      const port    = extractPort(envVars)
+
+      groupNodes.push({
         id:        project.id,
         label:     project.name,
         role,
@@ -1446,35 +1449,37 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
         groupName: group.name,
       })
     }
-  }
 
-  // Second pass: infer edges
-  for (const node of nodes) {
-    const env = node.envVars
+    nodes.push(...groupNodes)
 
-    // DB / cache edges
-    for (const { pattern, label, role } of DB_ENV_PATTERNS) {
-      const match = Object.keys(env).find(k => pattern.test(k))
-      if (!match) continue
-      let dbId = dbNodes.get(label)
-      if (!dbId) {
-        dbId = `db-${label.toLowerCase()}`
-        dbNodes.set(label, dbId)
-        nodes.push({ id: dbId, label, role, path: '', tech: [label.toLowerCase()], envVars: {} })
+    // Infer edges within this group only
+    for (const node of groupNodes) {
+      const env = node.envVars
+
+      // DB / cache edges — scoped to this group
+      for (const { pattern, label, role } of DB_ENV_PATTERNS) {
+        const match = Object.keys(env).find(k => pattern.test(k))
+        if (!match) continue
+        let dbId = groupDbNodes.get(label)
+        if (!dbId) {
+          dbId = `db-${group.id}-${label.toLowerCase()}`
+          groupDbNodes.set(label, dbId)
+          nodes.push({ id: dbId, label, role, path: '', tech: [label.toLowerCase()], envVars: {}, groupId: group.id, groupName: group.name })
+        }
+        edges.push({ source: node.id, target: dbId, label: match })
       }
-      edges.push({ source: node.id, target: dbId, label: match })
-    }
 
-    // API URL edges → find matching backend by port
-    for (const pat of API_ENV_PATTERNS) {
-      const key = Object.keys(env).find(k => pat.test(k))
-      if (!key) continue
-      const val  = env[key]
-      const port = extractUrlPort(val)
-      if (!port) continue
-      const target = nodes.find(n => n.id !== node.id && n.port === port)
-      if (target) {
-        edges.push({ source: node.id, target: target.id, label: key })
+      // API URL edges — only match within same group
+      for (const pat of API_ENV_PATTERNS) {
+        const key = Object.keys(env).find(k => pat.test(k))
+        if (!key) continue
+        const val  = env[key]
+        const port = extractUrlPort(val)
+        if (!port) continue
+        const target = groupNodes.find(n => n.id !== node.id && n.port === port)
+        if (target) {
+          edges.push({ source: node.id, target: target.id, label: key })
+        }
       }
     }
   }

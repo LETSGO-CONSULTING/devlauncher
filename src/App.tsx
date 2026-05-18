@@ -59,6 +59,7 @@ declare global {
       licenseActivate: (key: string) => Promise<{ success?: boolean; tier?: string; expiresAt?: string; error?: string }>
       licenseDeactivate: () => Promise<{ success?: boolean; error?: string }>
       getProjectGraph: () => Promise<{ nodes: unknown[]; edges: unknown[] }>
+      checkPorts: (ports: number[]) => Promise<Record<number, boolean>>
       onProcessLog: (cb: (p: { key: string; data: string; type: 'stdout' | 'stderr' }) => void) => () => void
       onProcessExit: (cb: (p: { key: string; code: number | null }) => void) => () => void
       onProcessStarted: (cb: (p: { key: string; pid: number | null }) => void) => () => void

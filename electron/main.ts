@@ -903,6 +903,21 @@ ipcMain.handle('get-process-pids', () => {
 })
 
 /// ─── Kill any process occupying a port ────────────────────────────────────
+ipcMain.handle('check-ports', (_e, ports: number[]): Promise<Record<number, boolean>> => {
+  const net = require('net') as typeof import('net')
+  const probe = (port: number): Promise<boolean> =>
+    new Promise(resolve => {
+      const s = new net.Socket()
+      s.setTimeout(800)
+      s.on('connect', () => { s.destroy(); resolve(true) })
+      s.on('error',   () => resolve(false))
+      s.on('timeout', () => { s.destroy(); resolve(false) })
+      s.connect(port, '127.0.0.1')
+    })
+  return Promise.all(ports.map(p => probe(p).then(ok => [p, ok] as [number, boolean])))
+    .then(results => Object.fromEntries(results))
+})
+
 ipcMain.handle('kill-port', (_e, port: number): Promise<{ success: boolean; error?: string }> => {
   return new Promise((resolve) => {
     const cmd = process.platform === 'win32'

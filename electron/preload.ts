@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInFinder: (folderPath: string) => ipcRenderer.invoke('open-in-finder', folderPath),
   killPort: (port: number) => ipcRenderer.invoke('kill-port', port),
   getProcessPids: () => ipcRenderer.invoke('get-process-pids'),
+  checkPorts: (ports: number[]) => ipcRenderer.invoke('check-ports', ports),
   sendInput: (projectId: string, scriptKey: string, text: string) =>
     ipcRenderer.invoke('send-input', projectId, scriptKey, text),
 

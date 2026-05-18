@@ -143,8 +143,10 @@ function ServiceCard({ node, pos, isRunning, selected, onSelect, onDragStart, ca
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
         <span style={{
           width:7, height:7, borderRadius:'50%', flexShrink:0,
-          background: col.border, boxShadow: `0 0 5px ${col.border}`,
+          background: isRunning ? '#10b981' : col.border,
+          boxShadow: isRunning ? '0 0 6px #10b981' : `0 0 5px ${col.border}`,
           animation: isRunning ? 'cdotPulse 2s ease-in-out infinite' : 'none',
+          transition: 'background 0.4s, box-shadow 0.4s',
         }} />
         <span style={{ fontSize:13.5, fontWeight:600, letterSpacing:'-0.1px', color:'#e2e8f0' }}>
           {node.label}
@@ -477,6 +479,23 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId:string; allNodes
   const groupIds   = new Set(groupNodes.map(n => n.id))
   const groupEdges = allEdges.filter(e => groupIds.has(e.source) && groupIds.has(e.target))
 
+  // TCP port reachability for infra nodes (DB, cache, storage)
+  const [portLive, setPortLive] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    const infraNodes = groupNodes.filter(n => n.port && (n.id.startsWith('db-') || n.role === 'database' || n.role === 'cache'))
+    if (!infraNodes.length) return
+    const probe = async () => {
+      const ports = infraNodes.map(n => n.port!)
+      const result = await window.electronAPI.checkPorts(ports)
+      const byId: Record<string, boolean> = {}
+      for (const n of infraNodes) byId[n.id] = result[n.port!] ?? false
+      setPortLive(byId)
+    }
+    probe()
+    const interval = setInterval(probe, 5000)
+    return () => clearInterval(interval)
+  }, [groupId])
+
   const [pan,  setPan]  = useState({ x: 80, y: 60 })
   const [zoom, setZoom] = useState(1)
   const [positions, setPositions] = useState<Record<string, { x:number; y:number }>>(() => buildPositions(groupNodes))
@@ -490,9 +509,10 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId:string; allNodes
   const panDrag  = useRef<{ sx:number; sy:number; px:number; py:number } | null>(null)
   const cardDrag = useRef<{ id:string; sx:number; sy:number; ox:number; oy:number; moved:boolean } | null>(null)
 
+  // isRunning: DevLauncher process OR TCP port reachable (for infra nodes)
   const isRunning = useCallback((id: string) =>
-    Object.entries(statuses).some(([k, v]) => k.startsWith(id + ':') && v === 'running'),
-  [statuses])
+    Object.entries(statuses).some(([k, v]) => k.startsWith(id + ':') && v === 'running') || portLive[id] === true,
+  [statuses, portLive])
 
   // Measure view size
   useEffect(() => {

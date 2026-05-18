@@ -10,11 +10,15 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  NodeResizer,
+  Handle,
+  Position,
   type Node,
   type Edge,
   type Connection,
   type EdgeProps,
   type NodeMouseHandler,
+  type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useStore } from '../store'
@@ -43,164 +47,147 @@ interface GraphEdge {
 
 // ─── Colors ────────────────────────────────────────────────────────────────
 
-const ROLE_COLOR: Record<NodeRole, { bg: string; border: string; text: string; glow: string }> = {
-  frontend:  { bg: '#0d2a4a', border: '#3b82f6', text: '#93c5fd', glow: '#3b82f680' },
-  backend:   { bg: '#0a2e1a', border: '#22c55e', text: '#86efac', glow: '#22c55e80' },
-  fullstack: { bg: '#2a1a0a', border: '#f59e0b', text: '#fcd34d', glow: '#f59e0b80' },
-  database:  { bg: '#2a0a1a', border: '#ec4899', text: '#f9a8d4', glow: '#ec489980' },
-  cache:     { bg: '#1a0a2a', border: '#a855f7', text: '#d8b4fe', glow: '#a855f780' },
-  unknown:   { bg: '#1a1a2a', border: '#6b7280', text: '#9ca3af', glow: '#6b728080' },
+const ROLE_COLOR: Record<NodeRole, { bg: string; border: string; text: string; glow: string; label: string }> = {
+  database:  { bg: '#1a0a12', border: '#ec4899', text: '#f9a8d4', glow: '#ec489940', label: 'Database' },
+  cache:     { bg: '#12081a', border: '#a855f7', text: '#d8b4fe', glow: '#a855f740', label: 'Cache'    },
+  backend:   { bg: '#081a0e', border: '#22c55e', text: '#86efac', glow: '#22c55e40', label: 'Backend'  },
+  fullstack: { bg: '#1a120a', border: '#f59e0b', text: '#fcd34d', glow: '#f59e0b40', label: 'Fullstack'},
+  frontend:  { bg: '#080f1a', border: '#3b82f6', text: '#93c5fd', glow: '#3b82f640', label: 'Frontend' },
+  unknown:   { bg: '#0f0f18', border: '#475569', text: '#94a3b8', glow: '#47556940', label: 'Unknown'  },
 }
 
-const ROLE_ICON: Record<NodeRole, string> = {
-  frontend:  '🖥',
-  backend:   '⚙️',
-  fullstack: '⚡',
-  database:  '🗄',
-  cache:     '⚡',
-  unknown:   '📦',
+// Layout: DB(0) → Backend(1) → Fullstack(2) → Frontend(3)
+const ROLE_COL: Record<NodeRole, number> = {
+  database:  0,
+  cache:     0,
+  backend:   1,
+  unknown:   1,
+  fullstack: 2,
+  frontend:  3,
 }
 
-function edgeColor(label: string): string {
-  const l = label.toLowerCase()
-  if (l.includes('mongo') || l.includes('redis'))                           return '#a855f7'
-  if (l.includes('database') || l.includes('postgres') || l.includes('mysql')) return '#ec4899'
-  if (l.includes('supabase') || l.includes('firebase'))                    return '#f59e0b'
-  return '#3b82f6'
+// ─── Custom resizable node ─────────────────────────────────────────────────
+
+const HANDLE_STYLE: React.CSSProperties = {
+  width: 8, height: 8,
+  background: '#1e2d45',
+  border: '1.5px solid #334155',
+  borderRadius: '50%',
 }
+
+function ServiceNode({ data, selected }: NodeProps) {
+  const d   = data as { graphNode: GraphNode; onSelect: (n: GraphNode) => void }
+  const n   = d.graphNode
+  const col = ROLE_COLOR[n.role]
+
+  return (
+    <>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={120} minHeight={60}
+        handleStyle={{ width: 7, height: 7, background: col.border, border: 'none', borderRadius: 2 }}
+        lineStyle={{ borderColor: col.border, borderWidth: 1 }}
+      />
+
+      {/* Handles — all 4 sides */}
+      <Handle type="source" position={Position.Top}    id="t" style={{ ...HANDLE_STYLE, top: -4 }} />
+      <Handle type="source" position={Position.Right}  id="r" style={{ ...HANDLE_STYLE, right: -4 }} />
+      <Handle type="source" position={Position.Bottom} id="b" style={{ ...HANDLE_STYLE, bottom: -4 }} />
+      <Handle type="source" position={Position.Left}   id="l" style={{ ...HANDLE_STYLE, left: -4 }} />
+      <Handle type="target" position={Position.Top}    id="tt" style={{ ...HANDLE_STYLE, top: -4 }} />
+      <Handle type="target" position={Position.Right}  id="tr" style={{ ...HANDLE_STYLE, right: -4 }} />
+      <Handle type="target" position={Position.Bottom} id="tb" style={{ ...HANDLE_STYLE, bottom: -4 }} />
+      <Handle type="target" position={Position.Left}   id="tl" style={{ ...HANDLE_STYLE, left: -4 }} />
+
+      <div
+        onClick={() => d.onSelect(n)}
+        style={{
+          width: '100%', height: '100%',
+          padding: '8px 10px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          cursor: 'pointer',
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 11, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {n.label}
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+          {n.port && (
+            <span style={{ fontSize: 9, color: '#475569', fontFamily: 'monospace' }}>:{n.port}</span>
+          )}
+          {n.tech.slice(0, 2).map(t => (
+            <span key={t} style={{
+              fontSize: 9, padding: '0 4px',
+              background: `${col.border}18`,
+              border: `1px solid ${col.border}30`,
+              borderRadius: 3, color: col.text,
+            }}>{t}</span>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+const nodeTypes = { service: ServiceNode }
 
 // ─── Layout constants ──────────────────────────────────────────────────────
 
-const NODE_W      = 150
-const NODE_H      = 140
-const NODE_GAP_Y  = 24
-const GRP_PAD     = 40
-const GRP_GAP_X   = 60
-const DB_COL_X    = 9999 // resolved at runtime
+const NODE_W     = 150
+const NODE_H     = 70
+const NODE_GAP_Y = 16
+const COL_GAP_X  = 120
+const GRP_PAD    = 32
 
-// ─── Build flow nodes+edges from graph data ────────────────────────────────
+// ─── Layout builder ────────────────────────────────────────────────────────
 
-function makeNodeEl(n: GraphNode): Node {
-  const col = ROLE_COLOR[n.role]
-  return {
-    id:   n.id,
-    type: 'default',
-    position: { x: 0, y: 0 }, // overridden below
-    data: {
-      role: n.role,
-      graphNode: n,
-      label: (
-        <div style={{ textAlign: 'center', padding: '6px 8px' }}>
-          <div style={{ fontSize: 20, marginBottom: 2 }}>{ROLE_ICON[n.role]}</div>
-          <div style={{ fontWeight: 700, fontSize: 12, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
-          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 1 }}>
-            {n.role}{n.port ? ` · :${n.port}` : ''}
-          </div>
-          <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
-            {n.tech.slice(0, 3).map(t => (
-              <span key={t} style={{
-                fontSize: 9, padding: '1px 4px',
-                background: `${col.border}22`, border: `1px solid ${col.border}44`,
-                borderRadius: 4, color: col.text,
-              }}>{t}</span>
-            ))}
-          </div>
-        </div>
-      ),
-    },
-    style: {
-      width: NODE_W,
-      background: col.bg, border: `1.5px solid ${col.border}`,
-      borderRadius: 12, color: col.text,
-      boxShadow: `0 0 14px ${col.glow}, 0 0 4px ${col.border}60`,
-      animation: 'nodePulse 3s ease-in-out infinite',
-    },
-  }
-}
-
-// Role → column index (left to right: frontend → fullstack → backend → db/cache at bottom)
-const ROLE_COL: Record<NodeRole, number> = {
-  frontend:  0,
-  fullstack: 1,
-  backend:   2,
-  unknown:   1,
-  database:  99, // bottom row
-  cache:     99,
-}
-
-function buildLayout(rawNodes: GraphNode[], rawEdges: GraphEdge[]): { nodes: Node[]; edges: Edge[] } {
+function buildLayout(
+  rawNodes: GraphNode[],
+  rawEdges: GraphEdge[],
+  onSelect: (n: GraphNode) => void,
+): { nodes: Node[]; edges: Edge[] } {
   const flowNodes: Node[] = []
   const flowEdges: Edge[] = []
 
-  const projectNodes = rawNodes.filter(n => !n.id.startsWith('db-'))
-  const dbNodes      = rawNodes.filter(n => n.id.startsWith('db-'))
-
-  // Bucket project nodes by column
+  // Bucket by column
   const cols = new Map<number, GraphNode[]>()
-  for (const n of projectNodes) {
-    const col = ROLE_COL[n.role]
-    if (!cols.has(col)) cols.set(col, [])
-    cols.get(col)!.push(n)
+  for (const n of rawNodes) {
+    const c = ROLE_COL[n.role]
+    if (!cols.has(c)) cols.set(c, [])
+    cols.get(c)!.push(n)
   }
 
-  // Assign positions — each column stacks vertically
-  const COL_W    = NODE_W + GRP_GAP_X
-  const sortedCols = [...cols.keys()].sort((a, b) => a - b)
+  const sortedColKeys = [...cols.keys()].sort((a, b) => a - b)
+  const colIndexMap   = new Map(sortedColKeys.map((k, i) => [k, i]))
+  const COL_W         = NODE_W + COL_GAP_X
 
-  // Remap sparse col indices to dense 0,1,2…
-  const colIndex = new Map(sortedCols.map((c, i) => [c, i]))
-  const totalCols = sortedCols.length
+  // Max height for centering shorter columns
+  const maxRows = Math.max(...[...cols.values()].map(ns => ns.length), 1)
+  const totalH  = maxRows * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y
 
   for (const [colKey, nodes] of cols) {
-    const ci = colIndex.get(colKey)!
-    // Center the column horizontally within its slot
-    const cx = ci * COL_W
-
-    // Column label node
-    if (nodes.length > 0) {
-      const roleLabel = nodes[0].role.toUpperCase()
-      const col = ROLE_COLOR[nodes[0].role]
-      flowNodes.push({
-        id: `col-label-${colKey}`,
-        type: 'default',
-        position: { x: cx + (NODE_W - 100) / 2, y: -38 },
-        selectable: false, draggable: false,
-        data: {
-          label: (
-            <span style={{ fontSize: 10, fontWeight: 700, color: col.border, letterSpacing: '0.07em' }}>
-              {roleLabel}
-            </span>
-          ),
-        },
-        style: {
-          background: `${col.border}12`,
-          border: `1px solid ${col.border}30`,
-          borderRadius: 6, padding: '2px 10px',
-          boxShadow: 'none', width: 100,
-          pointerEvents: 'none',
-        },
-      })
-    }
+    const ci  = colIndexMap.get(colKey)!
+    const cx  = GRP_PAD + ci * COL_W
+    const colH = nodes.length * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y
+    const startY = (totalH - colH) / 2  // vertically center shorter columns
 
     nodes.forEach((n, ni) => {
-      const node = makeNodeEl(n)
-      node.position = { x: cx, y: ni * (NODE_H + NODE_GAP_Y) }
-      flowNodes.push(node)
+      flowNodes.push({
+        id:   n.id,
+        type: 'service',
+        position: { x: cx, y: GRP_PAD + startY + ni * (NODE_H + NODE_GAP_Y) },
+        data: { graphNode: n, onSelect },
+        style: {
+          width:  NODE_W,
+          height: NODE_H,
+          background: ROLE_COLOR[n.role].bg,
+          border: `1px solid ${ROLE_COLOR[n.role].border}`,
+          borderRadius: 8,
+          boxShadow: `0 0 10px ${ROLE_COLOR[n.role].glow}`,
+        },
+      })
     })
   }
-
-  // DB/cache row — centered below all project columns
-  const projectRowW = Math.max(totalCols - 1, 0) * COL_W + NODE_W
-  const dbRowW      = Math.max(dbNodes.length - 1, 0) * (NODE_W + GRP_GAP_X)
-  const dbStartX    = (projectRowW - dbRowW) / 2
-  const maxColH     = Math.max(...[...cols.values()].map(ns => ns.length), 1)
-  const dbY         = maxColH * (NODE_H + NODE_GAP_Y) + 80
-
-  dbNodes.forEach((n, i) => {
-    const node = makeNodeEl(n)
-    node.position = { x: dbStartX + i * (NODE_W + GRP_GAP_X), y: dbY }
-    flowNodes.push(node)
-  })
 
   rawEdges.forEach((e, i) => {
     flowEdges.push({
@@ -212,25 +199,35 @@ function buildLayout(rawNodes: GraphNode[], rawEdges: GraphEdge[]): { nodes: Nod
   return { nodes: flowNodes, edges: flowEdges }
 }
 
-// ─── Animated Energy Edge ──────────────────────────────────────────────────
+// ─── Edge color ────────────────────────────────────────────────────────────
 
-const PARTICLES = [0, 0.33, 0.66]
+function edgeColor(label: string): string {
+  const l = label.toLowerCase()
+  if (l.includes('mongo') || l.includes('redis'))                                return '#a855f7'
+  if (l.includes('database') || l.includes('postgres') || l.includes('mysql'))  return '#ec4899'
+  if (l.includes('supabase') || l.includes('firebase'))                         return '#f59e0b'
+  return '#3b82f6'
+}
+
+// ─── Animated energy edge ──────────────────────────────────────────────────
+
+const PARTICLES = [0, 0.4, 0.7]
 
 function EnergyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps) {
   const label = (data as { label?: string })?.label ?? ''
   const color = edgeColor(label)
-  const dur   = 1.8
+  const dur   = 2
 
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={{ stroke: `${color}30`, strokeWidth: 1.5 }} />
-      <path d={edgePath} fill="none" stroke={color} strokeWidth={2} strokeOpacity={0.6}
-        strokeDasharray="6 10" style={{ animation: `dashFlow ${dur}s linear infinite` }} />
+      <BaseEdge id={id} path={edgePath} style={{ stroke: `${color}20`, strokeWidth: 1 }} />
+      <path d={edgePath} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.5}
+        strokeDasharray="5 8" style={{ animation: `dashFlow ${dur}s linear infinite` }} />
       <g>
         {PARTICLES.map((offset, i) => (
-          <circle key={i} r={4} fill={color} style={{ filter: `drop-shadow(0 0 5px ${color})` }}>
+          <circle key={i} r={3} fill={color} style={{ filter: `drop-shadow(0 0 4px ${color})` }}>
             <animateMotion dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" path={edgePath} />
             <animate attributeName="opacity" values="0;1;1;0" dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" />
           </circle>
@@ -240,9 +237,10 @@ function EnergyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
         <div style={{
           position: 'absolute',
           transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`,
-          fontSize: 10, color,
-          background: '#0b1120cc', padding: '1px 5px', borderRadius: 4,
-          border: `1px solid ${color}40`, pointerEvents: 'none', whiteSpace: 'nowrap',
+          fontSize: 9, color,
+          background: '#090e1a', padding: '1px 5px', borderRadius: 3,
+          border: `1px solid ${color}30`, pointerEvents: 'none', whiteSpace: 'nowrap',
+          opacity: 0.85,
         }} className="nodrag nopan">
           {label}
         </div>
@@ -292,115 +290,97 @@ function DetailPanel({ node, onClose }: { node: GraphNode; onClose: () => void }
     await window.electronAPI.stopProcess(project.id, scriptKey)
   }
 
-  const maskSecret = (v: string) => showSecrets ? v : v.slice(0, 4) + '••••••' + v.slice(-2)
+  const maskSecret = (v: string) => showSecrets ? v : '••••••••'
 
   return (
     <div style={{
-      width: 300, flexShrink: 0,
-      background: '#0c1829', borderLeft: `1px solid ${col.border}40`,
+      width: 280, flexShrink: 0,
+      background: '#090e1a', borderLeft: `1px solid ${col.border}30`,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      animation: 'slideIn 0.18s ease-out',
+      animation: 'slideIn 0.15s ease-out',
     }}>
       {/* Header */}
-      <div style={{
-        padding: '12px 14px', borderBottom: `1px solid ${col.border}30`,
-        background: `${col.bg}cc`, display: 'flex', alignItems: 'flex-start', gap: 10,
-      }}>
-        <div style={{ fontSize: 26 }}>{ROLE_ICON[node.role]}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</div>
-          <div style={{ display: 'flex', gap: 5, marginTop: 4, flexWrap: 'wrap' }}>
-            <Badge color={col.border} text={col.text}>{node.role}</Badge>
-            {node.port && <Badge color="#ffffff18" text="#9ca3af">:{node.port}</Badge>}
-            {node.groupName && <Badge color="#1e2d45" text="#64748b">{node.groupName}</Badge>}
-            {isRunning && (
-              <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, background: '#22c55e22', border: '1px solid #22c55e66', color: '#86efac', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', animation: 'nodePulse 1s ease-in-out infinite', display: 'inline-block' }} />
-                running
-              </span>
-            )}
-          </div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 15, padding: '0 2px', lineHeight: 1 }}>✕</button>
+      <div style={{ padding: '10px 12px', borderBottom: `1px solid ${col.border}20`, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${col.border}18`, border: `1px solid ${col.border}40`, color: col.text, fontWeight: 700 }}>
+          {col.label}
+        </span>
+        <span style={{ fontWeight: 700, fontSize: 13, color: '#e2e8f0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</span>
+        {isRunning && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', flexShrink: 0, boxShadow: '0 0 6px #22c55e' }} />}
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>✕</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 16px' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {node.path && (
-          <Section title="Path" color={col.border}>
+          <Sec title="Path" color={col.border}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ fontSize: 10, color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }} title={node.path}>{node.path}</span>
-              <button onClick={() => window.electronAPI.openInFinder(node.path)} style={btnStyle('#1e2d45', '#9ca3af')}>Finder</button>
+              <span style={{ fontSize: 10, color: '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{node.path}</span>
+              <Btn bg="#1e2d45" color="#64748b" onClick={() => window.electronAPI.openInFinder(node.path)}>Finder</Btn>
             </div>
-          </Section>
+          </Sec>
+        )}
+
+        {node.port && (
+          <Sec title="Port" color={col.border}>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: col.text }}>:{node.port}</span>
+          </Sec>
         )}
 
         {node.tech.length > 0 && (
-          <Section title="Tech Stack" color={col.border}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          <Sec title="Stack" color={col.border}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {node.tech.map(t => (
-                <span key={t} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: `${col.border}18`, border: `1px solid ${col.border}44`, color: col.text }}>{t}</span>
+                <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${col.border}14`, border: `1px solid ${col.border}30`, color: col.text }}>{t}</span>
               ))}
             </div>
-          </Section>
+          </Sec>
         )}
 
         {scriptKeys.length > 0 && (
-          <Section title="Scripts" color={col.border}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <Sec title="Scripts" color={col.border}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {scriptKeys.map(sk => {
                 const key     = `${node.id}:${sk}`
                 const running = statuses[key] === 'running'
                 return (
                   <div key={sk} style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 8,
-                    background: running ? '#22c55e10' : '#ffffff06',
-                    border: `1px solid ${running ? '#22c55e30' : '#ffffff10'}`,
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px', borderRadius: 6,
+                    background: running ? '#22c55e0a' : '#ffffff05',
+                    border: `1px solid ${running ? '#22c55e20' : '#ffffff08'}`,
                   }}>
-                    {running && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', animation: 'nodePulse 1s ease-in-out infinite', flexShrink: 0 }} />}
+                    {running && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#e2e8f0' }}>{sk}</div>
-                      <div style={{ fontSize: 9, color: '#6b7280', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project?.scripts[sk]}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#cbd5e1' }}>{sk}</div>
+                      <div style={{ fontSize: 9, color: '#334155', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project?.scripts[sk]}</div>
                     </div>
                     {running
-                      ? <button onClick={() => handleStop(sk)} style={btnStyle('#3f0a0a', '#ef4444')}>■ Stop</button>
-                      : <button onClick={() => handleStart(sk)} disabled={launching === sk} style={btnStyle('#0a2e1a', '#22c55e')}>{launching === sk ? '…' : '▶ Run'}</button>
+                      ? <Btn bg="#1a0505" color="#ef4444" onClick={() => handleStop(sk)}>■</Btn>
+                      : <Btn bg="#051a0a" color="#22c55e" onClick={() => handleStart(sk)} disabled={launching === sk}>{launching === sk ? '…' : '▶'}</Btn>
                     }
                   </div>
                 )
               })}
             </div>
-          </Section>
+          </Sec>
         )}
 
         {envEntries.length > 0 && (
-          <Section title="Environment" color={col.border} action={
-            <button onClick={() => setShowSecrets(v => !v)} style={{ fontSize: 10, background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 0 }}>
-              {showSecrets ? '🙈 hide' : '👁 reveal'}
+          <Sec title="Env" color={col.border} action={
+            <button onClick={() => setShowSecrets(v => !v)} style={{ fontSize: 9, background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 0 }}>
+              {showSecrets ? 'hide' : 'reveal'}
             </button>
           }>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {envEntries.map(([k, v]) => {
-                const isSecret = SECRET_KEYS.test(k)
-                return (
-                  <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 5px', borderRadius: 4, background: '#ffffff05', fontSize: 10, fontFamily: 'monospace' }}>
-                    <span style={{ color: col.text, flexShrink: 0, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</span>
-                    <span style={{ color: '#374151' }}>=</span>
-                    <span style={{ color: isSecret && !showSecrets ? '#ef444488' : '#9ca3af', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {isSecret ? maskSecret(v) : v}
-                    </span>
-                  </div>
-                )
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {envEntries.map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', gap: 5, fontSize: 9, fontFamily: 'monospace', padding: '2px 0' }}>
+                  <span style={{ color: col.text, flexShrink: 0, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</span>
+                  <span style={{ color: '#1e2d45' }}>=</span>
+                  <span style={{ color: SECRET_KEYS.test(k) && !showSecrets ? '#1e2d45' : '#475569', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {SECRET_KEYS.test(k) ? maskSecret(v) : v}
+                  </span>
+                </div>
+              ))}
             </div>
-          </Section>
-        )}
-
-        {!project && node.role !== 'unknown' && (
-          <Section title="Info" color={col.border}>
-            <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
-              External {node.role} detected via env vars in connected projects.
-            </div>
-          </Section>
+          </Sec>
         )}
       </div>
     </div>
@@ -409,23 +389,11 @@ function DetailPanel({ node, onClose }: { node: GraphNode; onClose: () => void }
 
 // ─── Micro components ──────────────────────────────────────────────────────
 
-function Badge({ color, text, children }: { color: string; text: string; children: React.ReactNode }) {
+function Sec({ title, color, action, children }: { title: string; color: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, background: `${color}22`, border: `1px solid ${color}66`, color: text }}>
-      {children}
-    </span>
-  )
-}
-
-function btnStyle(bg: string, color: string): React.CSSProperties {
-  return { fontSize: 10, padding: '2px 7px', borderRadius: 5, background: bg, border: `1px solid ${color}44`, color, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }
-}
-
-function Section({ title, color, action, children }: { title: string; color: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div style={{ padding: '10px 14px', borderBottom: '1px solid #1e2d4540' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 7 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color }}>{title}</span>
+    <div style={{ padding: '8px 12px', borderBottom: '1px solid #0f1a2a' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color }}>{title}</span>
         {action && <span style={{ marginLeft: 'auto' }}>{action}</span>}
       </div>
       {children}
@@ -433,77 +401,82 @@ function Section({ title, color, action, children }: { title: string; color: str
   )
 }
 
+function Btn({ bg, color, onClick, disabled, children }: { bg: string; color: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      fontSize: 9, padding: '2px 6px', borderRadius: 4,
+      background: bg, border: `1px solid ${color}30`,
+      color, cursor: 'pointer', flexShrink: 0,
+    }}>{children}</button>
+  )
+}
+
 // ─── CSS ───────────────────────────────────────────────────────────────────
 
 const CSS = `
-@keyframes dashFlow  { to { stroke-dashoffset: -32; } }
-@keyframes nodePulse { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.18)} }
-@keyframes slideIn   { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes dashFlow  { to { stroke-dashoffset: -26; } }
+@keyframes slideIn   { from { transform: translateX(16px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+.react-flow__node-service { overflow: visible !important; }
+.react-flow__handle { opacity: 0; transition: opacity 0.15s; }
+.react-flow__node:hover .react-flow__handle { opacity: 1; }
+.react-flow__node.selected .react-flow__handle { opacity: 1; }
 `
-
-// ─── Main component ────────────────────────────────────────────────────────
 
 // ─── Per-group canvas ──────────────────────────────────────────────────────
 
-function GroupCanvas({
-  groupId, allNodes, allEdges,
-}: { groupId: string; allNodes: GraphNode[]; allEdges: GraphEdge[] }) {
-  const groupNodes = allNodes.filter(n => n.groupId === groupId)
-  const groupEdgeTargets = new Set(groupNodes.map(n => n.id))
-  const groupEdges = allEdges.filter(e => groupEdgeTargets.has(e.source) && groupEdgeTargets.has(e.target))
+function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNodes: GraphNode[]; allEdges: GraphEdge[] }) {
+  const [selected, setSelected] = useState<GraphNode | null>(null)
 
-  const { nodes: fn, edges: fe } = buildLayout(groupNodes, groupEdges)
+  const groupNodes = allNodes.filter(n => n.groupId === groupId)
+  const groupIds   = new Set(groupNodes.map(n => n.id))
+  const groupEdges = allEdges.filter(e => groupIds.has(e.source) && groupIds.has(e.target))
+
+  const onSelect = useCallback((n: GraphNode) => setSelected(n), [])
+
+  const { nodes: fn, edges: fe } = buildLayout(groupNodes, groupEdges, onSelect)
 
   const [nodes, setNodes, onNodesChange] = useNodesState(fn)
   const [edges, setEdges, onEdgesChange] = useEdgesState(fe)
-  const [selected, setSelected]          = useState<GraphNode | null>(null)
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges(eds => addEdge({ ...params, type: 'energy', data: { label: 'custom' } }, eds)),
+    (p: Connection) => setEdges(eds => addEdge({ ...p, type: 'energy', data: { label: '' } }, eds)),
     [setEdges],
   )
 
-  const onNodeClick: NodeMouseHandler = useCallback((_evt, node) => {
+  // Update onSelect ref in node data when selection changes (avoid stale closure)
+  useEffect(() => {
+    setNodes(nds => nds.map(nd => nd.type === 'service'
+      ? { ...nd, data: { ...nd.data, onSelect } }
+      : nd
+    ))
+  }, [onSelect, setNodes])
+
+  const onNodeClick: NodeMouseHandler = useCallback((_e, node) => {
     const raw = groupNodes.find(n => n.id === node.id)
     if (raw) setSelected(raw)
   }, [groupNodes])
 
-  const projectCount    = groupNodes.filter(n => n.groupId && !n.id.startsWith('db-')).length
-  const connectionCount = groupEdges.length
-
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-      <div style={{ flex: 1, position: 'relative' }}>
-        {/* Stats bar */}
-        <div style={{
-          position: 'absolute', top: 12, left: 12, zIndex: 10,
-          display: 'flex', gap: 8, alignItems: 'center',
-          background: '#0b112099', backdropFilter: 'blur(8px)',
-          border: '1px solid #1e2d45', borderRadius: 8, padding: '5px 10px',
-        }}>
-          <span style={{ fontSize: 11, color: '#64748b' }}>{projectCount} services</span>
-          <span style={{ fontSize: 11, color: '#374151' }}>·</span>
-          <span style={{ fontSize: 11, color: '#64748b' }}>{connectionCount} connections</span>
-        </div>
-
+      <div style={{ flex: 1 }}>
         <ReactFlow
           nodes={nodes} edges={edges}
-          edgeTypes={edgeTypes}
+          nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           onPaneClick={() => setSelected(null)}
-          fitView fitViewOptions={{ padding: 0.2 }}
+          fitView fitViewOptions={{ padding: 0.25 }}
           colorMode="dark"
           defaultEdgeOptions={{ type: 'energy' }}
         >
-          <Background color="#1e2d4530" gap={28} size={1} />
-          <Controls style={{ background: '#0f1e35cc', border: '1px solid #1e2d45', borderRadius: 8 }} />
+          <Background color="#0f1a2a" gap={32} size={1} />
+          <Controls style={{ background: '#090e1acc', border: '1px solid #1e2d45', borderRadius: 6 }} />
           <MiniMap
-            style={{ background: '#0b1120', border: '1px solid #1e2d45', borderRadius: 8 }}
-            nodeColor={(n) => ROLE_COLOR[(n.data as { role?: NodeRole }).role ?? 'unknown'].border}
-            maskColor="#0b112088"
+            style={{ background: '#090e1a', border: '1px solid #1e2d45', borderRadius: 6 }}
+            nodeColor={(n) => ROLE_COLOR[(n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'].border}
+            maskColor="#090e1a88"
           />
         </ReactFlow>
       </div>
@@ -527,9 +500,7 @@ export default function ProjectMap() {
         const graph = await window.electronAPI.getProjectGraph() as { nodes: GraphNode[]; edges: GraphEdge[] }
         setAllNodes(graph.nodes)
         setAllEdges(graph.edges)
-        // default to first group
-        const firstGroup = graph.nodes.find(n => n.groupId)?.groupId ?? null
-        setActiveTab(firstGroup)
+        setActiveTab(graph.nodes.find(n => n.groupId)?.groupId ?? null)
       } catch (e) {
         setError(String(e))
       } finally {
@@ -539,17 +510,16 @@ export default function ProjectMap() {
   }, [])
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280', fontSize: 13 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#334155', fontSize: 12 }}>
       Building graph…
     </div>
   )
   if (error) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ef4444', fontSize: 13 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ef4444', fontSize: 12 }}>
       {error}
     </div>
   )
 
-  // Unique groups in order
   const groups: { id: string; name: string }[] = []
   const seen = new Set<string>()
   for (const n of allNodes) {
@@ -560,75 +530,60 @@ export default function ProjectMap() {
   }
 
   return (
-    <div style={{ height: '100%', width: '100%', background: '#0b1120', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', width: '100%', background: '#090e1a', display: 'flex', flexDirection: 'column' }}>
       <style>{CSS}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: '1px solid #1e2d45', flexShrink: 0 }}>
-        {/* Title + legend */}
-        <div style={{ padding: '8px 20px 0', display: 'flex', gap: 14, alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>Project Map</span>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div style={{ borderBottom: '1px solid #1e2d45', flexShrink: 0, background: '#090e1a' }}>
+        {/* Legend + title */}
+        <div style={{ padding: '8px 16px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, fontSize: 12, color: '#475569', letterSpacing: '0.05em' }}>MAP</span>
+          <div style={{ display: 'flex', gap: 12 }}>
             {(Object.entries(ROLE_COLOR) as [NodeRole, typeof ROLE_COLOR[NodeRole]][]).map(([role, c]) => (
-              <span key={role} style={{ fontSize: 10, color: c.text, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.border, boxShadow: `0 0 5px ${c.border}`, display: 'inline-block' }} />
-                {role}
+              <span key={role} style={{ fontSize: 10, color: c.text, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.border, display: 'inline-block' }} />
+                {c.label}
               </span>
             ))}
           </div>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: '#1e2d45', fontFamily: 'monospace' }}>
+            DB → backend → frontend
+          </span>
         </div>
 
-        {/* Group tabs */}
-        <div style={{ display: 'flex', gap: 0, paddingLeft: 12, paddingTop: 6, overflowX: 'auto' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', paddingLeft: 8, paddingTop: 4, overflowX: 'auto' }}>
           {groups.map(g => {
             const active = activeTab === g.id
-            const nodeCount = allNodes.filter(n => n.groupId === g.id && !n.id.startsWith('db-')).length
+            const count  = allNodes.filter(n => n.groupId === g.id && !n.id.startsWith('db-')).length
             return (
-              <button
-                key={g.id}
-                onClick={() => setActiveTab(g.id)}
-                style={{
-                  padding: '6px 16px',
-                  fontSize: 12, fontWeight: active ? 700 : 500,
-                  color: active ? '#e2e8f0' : '#64748b',
-                  background: active ? '#0f1e35' : 'transparent',
-                  border: 'none',
-                  borderTop: `2px solid ${active ? '#3b82f6' : 'transparent'}`,
-                  borderRight: '1px solid #1e2d4540',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
+              <button key={g.id} onClick={() => setActiveTab(g.id)} style={{
+                padding: '5px 14px', fontSize: 11,
+                fontWeight: active ? 600 : 400,
+                color: active ? '#cbd5e1' : '#475569',
+                background: active ? '#0f1a2acc' : 'transparent',
+                border: 'none',
+                borderBottom: `2px solid ${active ? '#3b82f6' : 'transparent'}`,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                display: 'flex', alignItems: 'center', gap: 5,
+                transition: 'all 0.12s',
+              }}>
                 {g.name}
                 <span style={{
-                  fontSize: 10, padding: '1px 5px', borderRadius: 8,
-                  background: active ? '#3b82f622' : '#ffffff0a',
-                  color: active ? '#93c5fd' : '#475569',
-                  border: `1px solid ${active ? '#3b82f640' : '#ffffff10'}`,
-                }}>{nodeCount}</span>
+                  fontSize: 9, padding: '0 4px', borderRadius: 6,
+                  background: active ? '#3b82f618' : '#ffffff08',
+                  color: active ? '#64748b' : '#334155',
+                }}>{count}</span>
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* Canvas for active group */}
-      {activeTab && (
-        <GroupCanvas
-          key={activeTab}
-          groupId={activeTab}
-          allNodes={allNodes}
-          allEdges={allEdges}
-        />
-      )}
-
-      {groups.length === 0 && (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151', fontSize: 13 }}>
-          No projects detected. Add a project first.
-        </div>
-      )}
+      {activeTab
+        ? <GroupCanvas key={activeTab} groupId={activeTab} allNodes={allNodes} allEdges={allEdges} />
+        : <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e2d45', fontSize: 12 }}>No projects</div>
+      }
     </div>
   )
 }

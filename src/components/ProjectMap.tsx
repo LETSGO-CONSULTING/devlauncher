@@ -64,13 +64,63 @@ const ROLE_COL: Record<NodeRole, number> = {
   frontend:  3,
 }
 
+// ─── Tech badge colors ─────────────────────────────────────────────────────
+
+const TECH_COLOR: Record<string, { bg: string; text: string; icon: string }> = {
+  react:      { bg: '#61DAFB18', text: '#61DAFB', icon: '⚛' },
+  nextjs:     { bg: '#ffffff10', text: '#e2e8f0', icon: '▲' },
+  vue:        { bg: '#42B88318', text: '#42B883', icon: '◈' },
+  nuxt:       { bg: '#00DC8218', text: '#00DC82', icon: '◈' },
+  angular:    { bg: '#DD003118', text: '#DD0031', icon: '◉' },
+  svelte:     { bg: '#FF3E0018', text: '#FF3E00', icon: '◈' },
+  vite:       { bg: '#BD34FE18', text: '#BD34FE', icon: '⚡' },
+  astro:      { bg: '#FF5D0118', text: '#FF5D01', icon: '🚀' },
+  nestjs:     { bg: '#E0234E18', text: '#E0234E', icon: '◉' },
+  express:    { bg: '#ffffff10', text: '#94a3b8', icon: '◈' },
+  fastify:    { bg: '#ffffff10', text: '#94a3b8', icon: '◈' },
+  django:     { bg: '#09352018', text: '#44b78b', icon: '◈' },
+  flask:      { bg: '#ffffff10', text: '#94a3b8', icon: '◈' },
+  fastapi:    { bg: '#00968818', text: '#00b8a9', icon: '⚡' },
+  rails:      { bg: '#CC000018', text: '#CC0000', icon: '◈' },
+  spring:     { bg: '#6DB33F18', text: '#6DB33F', icon: '◉' },
+  laravel:    { bg: '#FF2D2018', text: '#FF2D20', icon: '◉' },
+  typescript: { bg: '#3178C618', text: '#5b9bd5', icon: '🔷' },
+  javascript: { bg: '#F7DF1E18', text: '#d4b800', icon: '🔶' },
+  node:       { bg: '#339933', text: '#339933', icon: '◈' },
+  docker:     { bg: '#2496ED18', text: '#2496ED', icon: '🐳' },
+  go:         { bg: '#00ADD818', text: '#00ADD8', icon: '◈' },
+  rust:       { bg: '#CE412B18', text: '#CE412B', icon: '◈' },
+  python:     { bg: '#3776AB18', text: '#3776AB', icon: '🐍' },
+  ruby:       { bg: '#CC342D18', text: '#CC342D', icon: '💎' },
+  electron:   { bg: '#47848F18', text: '#47848F', icon: '⚡' },
+  php:        { bg: '#777BB418', text: '#8892BF', icon: '◈' },
+  laravel2:   { bg: '#FF2D2018', text: '#FF2D20', icon: '◉' },
+}
+
+function getTechStyle(t: string) {
+  return TECH_COLOR[t.toLowerCase()] ?? { bg: '#ffffff0a', text: '#64748b', icon: '◈' }
+}
+
 // ─── Custom resizable node ─────────────────────────────────────────────────
 
 const HANDLE_STYLE: React.CSSProperties = {
-  width: 8, height: 8,
-  background: '#1e2d45',
+  width: 9, height: 9,
+  background: '#0f1a2a',
   border: '1.5px solid #334155',
   borderRadius: '50%',
+}
+
+function handlePos(pos: 'Top'|'Right'|'Bottom'|'Left'): React.CSSProperties {
+  if (pos === 'Top')    return { top: -5 }
+  if (pos === 'Right')  return { right: -5 }
+  if (pos === 'Bottom') return { bottom: -5 }
+  return { left: -5 }
+}
+
+function roleSubtitle(n: GraphNode): string {
+  const col = ROLE_COLOR[n.role]
+  const hasDocker = n.tech.includes('docker')
+  return hasDocker ? `${col.label} · Docker` : col.label
 }
 
 function ServiceNode({ data, selected }: NodeProps) {
@@ -78,57 +128,79 @@ function ServiceNode({ data, selected }: NodeProps) {
   const n       = d.graphNode
   const col     = ROLE_COLOR[n.role]
   const running = d.isRunning
+  const dotColor = running ? '#22c55e' : col.border
 
   return (
     <>
       <NodeResizer
         isVisible={selected}
-        minWidth={120} minHeight={60}
+        minWidth={180} minHeight={80}
         handleStyle={{ width: 7, height: 7, background: col.border, border: 'none', borderRadius: 2 }}
         lineStyle={{ borderColor: col.border, borderWidth: 1 }}
       />
 
-      {/* Handles — all 4 sides, source+target so edges can reconnect from any side */}
       {(['Top','Right','Bottom','Left'] as const).map(pos => (
         <span key={pos}>
           <Handle type="source" position={Position[pos]} id={`s-${pos}`}
-            style={{ ...HANDLE_STYLE, ...(pos==='Top'?{top:-4}:pos==='Right'?{right:-4}:pos==='Bottom'?{bottom:-4}:{left:-4}) }} />
+            style={{ ...HANDLE_STYLE, ...handlePos(pos) }} />
           <Handle type="target" position={Position[pos]} id={`t-${pos}`}
-            style={{ ...HANDLE_STYLE, ...(pos==='Top'?{top:-4}:pos==='Right'?{right:-4}:pos==='Bottom'?{bottom:-4}:{left:-4}) }} />
+            style={{ ...HANDLE_STYLE, ...handlePos(pos) }} />
         </span>
       ))}
 
       <div
         onClick={() => d.onSelect(n)}
-        style={{ width: '100%', height: '100%', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center', cursor: 'pointer' }}
+        style={{ padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
       >
-        {/* Name + running indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          {running && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', flexShrink: 0, boxShadow: '0 0 5px #22c55e' }} />}
-          <span style={{ fontWeight: 700, fontSize: 11, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        {/* Name row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <span style={{
+            width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
+            background: dotColor,
+            boxShadow: running ? `0 0 7px ${dotColor}` : 'none',
+          }} />
+          <span style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9', letterSpacing: '-0.01em' }}>
             {n.label}
           </span>
         </div>
 
-        {/* Port + tech */}
-        <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-          {n.port && (
+        {/* Subtitle */}
+        <div style={{ fontSize: 11, color: '#475569', marginBottom: 12, paddingLeft: 17 }}>
+          {roleSubtitle(n)}
+        </div>
+
+        {/* Port(s) */}
+        {n.port && (
+          <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{
-              fontSize: 10, fontFamily: 'monospace', fontWeight: 700,
-              padding: '1px 5px', borderRadius: 3,
-              background: `${col.border}25`,
+              fontSize: 11, fontFamily: 'monospace', fontWeight: 700,
+              padding: '3px 9px', borderRadius: 6,
+              background: `${col.border}20`,
               border: `1px solid ${col.border}50`,
               color: col.text,
+              letterSpacing: '0.02em',
             }}>:{n.port}</span>
-          )}
-          {n.tech.slice(0, 2).map(t => (
-            <span key={t} style={{
-              fontSize: 9, padding: '0 4px',
-              background: `${col.border}10`,
-              border: `1px solid ${col.border}20`,
-              borderRadius: 3, color: `${col.text}99`,
-            }}>{t}</span>
-          ))}
+          </div>
+        )}
+
+        {/* Tech badges */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {n.tech.filter(t => t !== 'node').map(t => {
+            const ts = getTechStyle(t)
+            return (
+              <span key={t} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, padding: '3px 9px', borderRadius: 6,
+                background: ts.bg,
+                border: `1px solid ${ts.text}30`,
+                color: ts.text,
+                fontWeight: 500,
+              }}>
+                <span style={{ fontSize: 10 }}>{ts.icon}</span>
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </span>
+            )
+          })}
         </div>
       </div>
     </>
@@ -139,11 +211,11 @@ const nodeTypes = { service: ServiceNode }
 
 // ─── Layout constants ──────────────────────────────────────────────────────
 
-const NODE_W     = 150
-const NODE_H     = 70
-const NODE_GAP_Y = 16
-const COL_GAP_X  = 120
-const GRP_PAD    = 32
+const NODE_W     = 220
+const NODE_H     = 180  // estimated — cards auto-size
+const NODE_GAP_Y = 32
+const COL_GAP_X  = 160
+const GRP_PAD    = 40
 
 // ─── Layout builder ────────────────────────────────────────────────────────
 

@@ -1352,21 +1352,83 @@ const BACKEND_FRAMEWORKS   = new Set(['express','fastify','nestjs','django','fla
 const FULLSTACK_FRAMEWORKS = new Set(['nextjs','nuxt','electron'])
 
 const DB_ENV_PATTERNS = [
-  { pattern: /DATABASE_URL|POSTGRES_URL|PG_URL/i,       label: 'PostgreSQL', role: 'database' as NodeRole },
-  { pattern: /MONGO(DB)?_URI|MONGO_URL/i,               label: 'MongoDB',    role: 'database' as NodeRole },
-  { pattern: /MYSQL_URL|DB_URL/i,                       label: 'MySQL',      role: 'database' as NodeRole },
-  { pattern: /REDIS_URL|REDIS_URI/i,                    label: 'Redis',      role: 'cache'    as NodeRole },
-  { pattern: /SUPABASE_URL/i,                           label: 'Supabase',   role: 'database' as NodeRole },
-  { pattern: /FIREBASE_URL|FIREBASE_PROJECT/i,          label: 'Firebase',   role: 'database' as NodeRole },
+  // URL-style
+  { pattern: /DATABASE_URL|POSTGRES_URL|PG_URL/i,                          label: 'PostgreSQL', role: 'database' as NodeRole },
+  { pattern: /MONGO(DB)?_(URI|URL)/i,                                       label: 'MongoDB',    role: 'database' as NodeRole },
+  { pattern: /MYSQL_(URL|URI)|MARIADB_(URL|URI)/i,                          label: 'MySQL',      role: 'database' as NodeRole },
+  { pattern: /REDIS_(URL|URI)/i,                                            label: 'Redis',      role: 'cache'    as NodeRole },
+  { pattern: /SUPABASE_URL/i,                                               label: 'Supabase',   role: 'database' as NodeRole },
+  { pattern: /FIREBASE_(URL|PROJECT)/i,                                     label: 'Firebase',   role: 'database' as NodeRole },
+  // Host-style (TypeORM, Sequelize, Prisma, generic)
+  { pattern: /TYPEORM_HOST|TYPEORM_URL/i,                                   label: 'PostgreSQL', role: 'database' as NodeRole },
+  { pattern: /^(POSTGRES|PG|PGHOST|DB)_HOST$/i,                            label: 'PostgreSQL', role: 'database' as NodeRole },
+  { pattern: /^MYSQL_HOST$/i,                                               label: 'MySQL',      role: 'database' as NodeRole },
+  { pattern: /^MONGO(DB)?_HOST$/i,                                          label: 'MongoDB',    role: 'database' as NodeRole },
+  { pattern: /^REDIS_HOST$/i,                                               label: 'Redis',      role: 'cache'    as NodeRole },
+  // Storage
+  { pattern: /MINIO_(ENDPOINT|HOST|URL)/i,                                  label: 'MinIO',      role: 'cache'    as NodeRole },
+  { pattern: /^(AWS_S3_ENDPOINT|S3_ENDPOINT|STORAGE_URL)/i,                 label: 'S3 Storage', role: 'cache'    as NodeRole },
+  { pattern: /^AWS_BUCKET|S3_BUCKET|MINIO_BUCKET/i,                        label: 'S3 Storage', role: 'cache'    as NodeRole },
 ]
 
 const API_ENV_PATTERNS = [
+  /EXPO_PUBLIC_API/i,
   /REACT_APP_API_URL/i,
   /VITE_API_URL|VITE_APP_API/i,
   /NEXT_PUBLIC_API/i,
   /VUE_APP_API/i,
   /API_URL|API_BASE_URL|BACKEND_URL/i,
 ]
+
+// ─── docker-compose.yml infra service parser ──────────────────────────────
+
+interface DockerComposeService { name: string; image: string; ports: number[] }
+
+const COMPOSE_INFRA: Array<{ pattern: RegExp; label: string; role: NodeRole; tech: string[]; defaultPort: number }> = [
+  { pattern: /postgres|postgis/i,     label: 'PostgreSQL', role: 'database', tech: ['postgres', 'docker'], defaultPort: 5432  },
+  { pattern: /mysql|mariadb/i,        label: 'MySQL',      role: 'database', tech: ['mysql',    'docker'], defaultPort: 3306  },
+  { pattern: /mongo/i,                label: 'MongoDB',    role: 'database', tech: ['mongo',    'docker'], defaultPort: 27017 },
+  { pattern: /redis/i,                label: 'Redis',      role: 'cache',    tech: ['redis',    'docker'], defaultPort: 6379  },
+  { pattern: /minio/i,                label: 'MinIO',      role: 'cache',    tech: ['docker'],             defaultPort: 9000  },
+  { pattern: /rabbitmq/i,             label: 'RabbitMQ',   role: 'cache',    tech: ['docker'],             defaultPort: 5672  },
+  { pattern: /elasticsearch|opensearch/i, label: 'Elastic',role: 'database', tech: ['docker'],             defaultPort: 9200  },
+  { pattern: /cassandra/i,            label: 'Cassandra',  role: 'database', tech: ['docker'],             defaultPort: 9042  },
+  { pattern: /influxdb/i,             label: 'InfluxDB',   role: 'database', tech: ['docker'],             defaultPort: 8086  },
+]
+
+function parseDockerCompose(dirPath: string): DockerComposeService[] {
+  const files = ['docker-compose.yml','docker-compose.yaml','compose.yml','compose.yaml']
+  for (const file of files) {
+    const fp = path.join(dirPath, file)
+    if (!fs.existsSync(fp)) continue
+    try {
+      const lines = fs.readFileSync(fp, 'utf-8').split('\n')
+      const services: DockerComposeService[] = []
+      let inServices = false
+      let cur: Partial<DockerComposeService> | null = null
+      for (const raw of lines) {
+        if (/^services\s*:/.test(raw)) { inServices = true; continue }
+        if (!inServices) continue
+        const indent = raw.search(/\S/)
+        if (indent < 0) continue
+        if (/^[^\s]/.test(raw) && !/^services/.test(raw)) { inServices = false; continue }
+        if (indent === 2) {
+          if (cur?.name && cur.image) services.push(cur as DockerComposeService)
+          cur = { name: raw.trim().replace(/:$/, ''), image: '', ports: [] }
+        } else if (indent === 4 && cur) {
+          const m = raw.trim().match(/^image:\s*(.+)/)
+          if (m) cur.image = m[1].trim().replace(/["']/g, '')
+        } else if (indent >= 6 && cur) {
+          const m = raw.trim().match(/^-\s*["']?(\d+):(\d+)["']?/)
+          if (m) (cur.ports ??= []).push(parseInt(m[2], 10))
+        }
+      }
+      if (cur?.name && cur.image) services.push(cur as DockerComposeService)
+      return services
+    } catch { /* ignore */ }
+  }
+  return []
+}
 
 function parseEnvFile(projectPath: string): Record<string, string> {
   const envFiles = ['.env', '.env.local', '.env.development']
@@ -1442,61 +1504,93 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
   const edges: GraphEdge[]  = []
 
   for (const group of groups) {
-    // DB/cache nodes are scoped per group — each group owns its own services
-    const groupDbNodes = new Map<string, string>() // label → node id
+    const infraNodes = new Map<string, string>()  // label → node id
     const groupNodes: GraphNode[] = []
 
+    // ── 1. Build project nodes ───────────────────────────────────────────
     for (const project of group.projects) {
       const envVars = parseEnvFile(project.path)
       const role    = classifyRole(project.frameworks ?? [], envVars)
       const port    = extractPort(envVars)
-
       groupNodes.push({
-        id:        project.id,
-        label:     project.name,
-        role,
-        path:      project.path,
-        port,
-        tech:      project.frameworks ?? [],
-        envVars,
-        groupId:   group.id,
-        groupName: group.name,
+        id: project.id, label: project.name, role,
+        path: project.path, port,
+        tech: project.frameworks ?? [], envVars,
+        groupId: group.id, groupName: group.name,
       })
     }
 
-    nodes.push(...groupNodes)
+    // ── 2. Parse docker-compose.yml for infra services ───────────────────
+    //    Check group root + each project path
+    const composeDirs = [group.path, ...group.projects.map(p => p.path)]
+    const seenComposeDirs = new Set<string>()
+    const composeInfraNodes: GraphNode[] = []
 
-    // Infer edges within this group only
+    for (const dir of composeDirs) {
+      if (seenComposeDirs.has(dir)) continue
+      seenComposeDirs.add(dir)
+      const services = parseDockerCompose(dir)
+      for (const svc of services) {
+        for (const infra of COMPOSE_INFRA) {
+          if (!infra.pattern.test(svc.image)) continue
+          if (infraNodes.has(infra.label)) break  // already added
+          const infraId = `db-${group.id}-${infra.label.toLowerCase().replace(/\s/g, '-')}`
+          infraNodes.set(infra.label, infraId)
+          const port = svc.ports[0] ?? infra.defaultPort
+          composeInfraNodes.push({
+            id: infraId, label: svc.name || infra.label, role: infra.role,
+            path: '', port, tech: infra.tech, envVars: {},
+            groupId: group.id, groupName: group.name,
+          })
+          break
+        }
+      }
+    }
+
+    nodes.push(...groupNodes, ...composeInfraNodes)
+
+    // ── 3. Infer edges ───────────────────────────────────────────────────
     for (const node of groupNodes) {
       const env = node.envVars
 
-      // DB / cache edges — scoped to this group
+      // DB/cache/storage env-var edges
       for (const { pattern, label, role } of DB_ENV_PATTERNS) {
         const match = Object.keys(env).find(k => pattern.test(k))
         if (!match) continue
-        let dbId = groupDbNodes.get(label)
-        if (!dbId) {
-          dbId = `db-${group.id}-${label.toLowerCase()}`
-          groupDbNodes.set(label, dbId)
-          nodes.push({ id: dbId, label, role, path: '', tech: [label.toLowerCase()], envVars: {}, groupId: group.id, groupName: group.name })
+        let infraId = infraNodes.get(label)
+        if (!infraId) {
+          // Not found via docker-compose — create synthetic node
+          infraId = `db-${group.id}-${label.toLowerCase().replace(/\s/g, '-')}`
+          infraNodes.set(label, infraId)
+          nodes.push({
+            id: infraId, label, role, path: '',
+            tech: [label.toLowerCase()], envVars: {},
+            groupId: group.id, groupName: group.name,
+          })
         }
-        // Flow direction: DB/cache → service (data comes FROM db)
-        edges.push({ source: dbId, target: node.id, label: match })
+        edges.push({ source: infraId, target: node.id, label: match })
       }
 
-      // API URL edges — only match within same group
+      // API URL edges — backend → frontend
       for (const pat of API_ENV_PATTERNS) {
         const key = Object.keys(env).find(k => pat.test(k))
         if (!key) continue
         const val  = env[key]
         const port = extractUrlPort(val)
         if (!port) continue
-        // node is the consumer (frontend), target is the producer (backend)
-        // Flow direction: backend → frontend
         const backend = groupNodes.find(n => n.id !== node.id && n.port === port)
-        if (backend) {
-          edges.push({ source: backend.id, target: node.id, label: key })
-        }
+        if (backend) edges.push({ source: backend.id, target: node.id, label: key })
+      }
+    }
+
+    // ── 4. Connect infra nodes to backend if no edge was created yet ─────
+    //    Fallback: any infra node without edges → connect to all backends
+    for (const [, infraId] of infraNodes) {
+      const alreadyConnected = edges.some(e => e.source === infraId)
+      if (alreadyConnected) continue
+      const backends = groupNodes.filter(n => n.role === 'backend' || n.role === 'fullstack')
+      for (const b of backends) {
+        edges.push({ source: infraId, target: b.id, label: '' })
       }
     }
   }

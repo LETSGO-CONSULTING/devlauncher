@@ -1340,14 +1340,15 @@ ipcMain.handle('open-in-editor', (_e, projectPath: string, bin: string) => {
 type NodeRole = 'frontend' | 'backend' | 'fullstack' | 'database' | 'cache' | 'unknown'
 
 interface GraphNode {
-  id:        string
-  label:     string
-  role:      NodeRole
-  path:      string
-  port?:     number
-  tech:      string[]
-  envVars:   Record<string, string>
-  groupId?:  string
+  id:         string
+  label:      string
+  role:       NodeRole
+  path:       string
+  port?:      number
+  extraPorts?: Array<{ port: number; label?: string }>
+  tech:       string[]
+  envVars:    Record<string, string>
+  groupId?:   string
   groupName?: string
 }
 
@@ -1399,17 +1400,54 @@ const API_ENV_PATTERNS = [
 
 interface DockerComposeService { name: string; image: string; ports: number[] }
 
+// Known secondary port labels (e.g. MinIO console on 9001)
+const SECONDARY_PORT_LABELS: Record<number, string> = {
+  9001: 'console', 15672: 'admin', 8080: 'ui', 8081: 'ui',
+  5050: 'pgadmin', 8888: 'notebook',
+}
+
 const COMPOSE_INFRA: Array<{ pattern: RegExp; label: string; role: NodeRole; tech: string[]; defaultPort: number }> = [
-  { pattern: /postgres|postgis/i,     label: 'PostgreSQL', role: 'database', tech: ['postgres', 'docker'], defaultPort: 5432  },
-  { pattern: /mysql|mariadb/i,        label: 'MySQL',      role: 'database', tech: ['mysql',    'docker'], defaultPort: 3306  },
-  { pattern: /mongo/i,                label: 'MongoDB',    role: 'database', tech: ['mongo',    'docker'], defaultPort: 27017 },
-  { pattern: /redis/i,                label: 'Redis',      role: 'cache',    tech: ['redis',    'docker'], defaultPort: 6379  },
-  { pattern: /minio/i,                label: 'MinIO',      role: 'cache',    tech: ['docker'],             defaultPort: 9000  },
-  { pattern: /rabbitmq/i,             label: 'RabbitMQ',   role: 'cache',    tech: ['docker'],             defaultPort: 5672  },
-  { pattern: /elasticsearch|opensearch/i, label: 'Elastic',role: 'database', tech: ['docker'],             defaultPort: 9200  },
-  { pattern: /cassandra/i,            label: 'Cassandra',  role: 'database', tech: ['docker'],             defaultPort: 9042  },
-  { pattern: /influxdb/i,             label: 'InfluxDB',   role: 'database', tech: ['docker'],             defaultPort: 8086  },
+  { pattern: /postgres|postgis/i,         label: 'PostgreSQL', role: 'database', tech: ['postgres', 'docker'],              defaultPort: 5432  },
+  { pattern: /mysql|mariadb/i,            label: 'MySQL',      role: 'database', tech: ['mysql',    'docker'],              defaultPort: 3306  },
+  { pattern: /mongo/i,                    label: 'MongoDB',    role: 'database', tech: ['mongo',    'docker'],              defaultPort: 27017 },
+  { pattern: /redis/i,                    label: 'Redis',      role: 'cache',    tech: ['redis',    'docker'],              defaultPort: 6379  },
+  { pattern: /minio/i,                    label: 'MinIO',      role: 'cache',    tech: ['minio',    's3compatible','docker'],defaultPort: 9000  },
+  { pattern: /rabbitmq/i,                 label: 'RabbitMQ',   role: 'cache',    tech: ['docker'],                          defaultPort: 5672  },
+  { pattern: /elasticsearch|opensearch/i, label: 'Elastic',    role: 'database', tech: ['docker'],                          defaultPort: 9200  },
+  { pattern: /cassandra/i,                label: 'Cassandra',  role: 'database', tech: ['docker'],                          defaultPort: 9042  },
+  { pattern: /influxdb/i,                 label: 'InfluxDB',   role: 'database', tech: ['docker'],                          defaultPort: 8086  },
 ]
+
+// ─── package.json dependency → tech badge mapping ─────────────────────────
+
+const PKG_TECH_MAP: Array<{ pkgs: string[]; tech: string }> = [
+  { pkgs: ['jsonwebtoken', '@nestjs/jwt', 'passport-jwt'],          tech: 'jwt'        },
+  { pkgs: ['typeorm', '@nestjs/typeorm'],                            tech: 'typeorm'    },
+  { pkgs: ['prisma', '@prisma/client'],                              tech: 'prisma'     },
+  { pkgs: ['mongoose', '@nestjs/mongoose'],                          tech: 'mongoose'   },
+  { pkgs: ['@apollo/server','apollo-server','@nestjs/apollo'],       tech: 'graphql'    },
+  { pkgs: ['graphql'],                                               tech: 'graphql'    },
+  { pkgs: ['socket.io','@nestjs/websockets'],                        tech: 'websockets' },
+  { pkgs: ['bull','bullmq','@nestjs/bull','@nestjs/bullmq'],         tech: 'queue'      },
+  { pkgs: ['ioredis','redis','@nestjs/cache-manager'],               tech: 'redis'      },
+  { pkgs: ['aws-sdk','@aws-sdk/client-s3'],                          tech: 's3compatible'},
+  { pkgs: ['minio'],                                                 tech: 's3compatible'},
+  { pkgs: ['swagger-ui-express','@nestjs/swagger'],                  tech: 'swagger'    },
+]
+
+function scanPackageDeps(projectPath: string): string[] {
+  const pkgPath = path.join(projectPath, 'package.json')
+  if (!fs.existsSync(pkgPath)) return []
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+    const result: string[] = []
+    for (const { pkgs, tech } of PKG_TECH_MAP) {
+      if (pkgs.some(p => deps[p])) result.push(tech)
+    }
+    return result
+  } catch { return [] }
+}
 
 function parseDockerCompose(dirPath: string): DockerComposeService[] {
   const files = ['docker-compose.yml','docker-compose.yaml','compose.yml','compose.yaml']
@@ -1524,13 +1562,15 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
 
     // ── 1. Build project nodes ───────────────────────────────────────────
     for (const project of group.projects) {
-      const envVars = parseEnvFile(project.path)
-      const role    = classifyRole(project.frameworks ?? [], envVars)
-      const port    = extractPort(envVars)
+      const envVars  = parseEnvFile(project.path)
+      const role     = classifyRole(project.frameworks ?? [], envVars)
+      const port     = extractPort(envVars)
+      const pkgTech  = scanPackageDeps(project.path)
+      const tech     = [...new Set([...(project.frameworks ?? []), ...pkgTech])]
       groupNodes.push({
         id: project.id, label: project.name, role,
         path: project.path, port,
-        tech: project.frameworks ?? [], envVars,
+        tech, envVars,
         groupId: group.id, groupName: group.name,
       })
     }
@@ -1551,10 +1591,15 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
           if (infraNodes.has(infra.label)) break  // already added
           const infraId = `db-${group.id}-${infra.label.toLowerCase().replace(/\s/g, '-')}`
           infraNodes.set(infra.label, infraId)
-          const port = svc.ports[0] ?? infra.defaultPort
+          const primaryPort = svc.ports[0] ?? infra.defaultPort
+          const extraPorts  = svc.ports.slice(1).map(p => ({
+            port: p,
+            label: SECONDARY_PORT_LABELS[p],
+          }))
           composeInfraNodes.push({
             id: infraId, label: svc.name || infra.label, role: infra.role,
-            path: '', port, tech: infra.tech, envVars: {},
+            path: '', port: primaryPort, extraPorts,
+            tech: infra.tech, envVars: {},
             groupId: group.id, groupName: group.name,
           })
           break

@@ -7,7 +7,8 @@ type NodeRole = 'frontend' | 'backend' | 'fullstack' | 'database' | 'cache' | 'u
 
 interface GraphNode {
   id: string; label: string; role: NodeRole; path: string
-  port?: number; tech: string[]; envVars: Record<string, string>
+  port?: number; extraPorts?: Array<{ port: number; label?: string }>
+  tech: string[]; envVars: Record<string, string>
   groupId?: string; groupName?: string
 }
 interface GraphEdge { source: string; target: string; label: string }
@@ -61,8 +62,15 @@ const TECH: Record<string, TechStyle> = {
   mongo:      { bg:'rgba(0,237,100,.07)',    border:'rgba(0,237,100,.25)',    text:'#6ee7b7', icon:'◈',  label:'MongoDB'     },
   mongodb:    { bg:'rgba(0,237,100,.07)',    border:'rgba(0,237,100,.25)',    text:'#6ee7b7', icon:'◈',  label:'MongoDB'     },
   minio:      { bg:'rgba(220,50,50,.09)',    border:'rgba(220,50,50,.28)',    text:'#fca5a5', icon:'◈',  label:'MinIO'       },
-  jwt:        { bg:'rgba(234,179,8,.09)',    border:'rgba(234,179,8,.25)',    text:'#fde047', icon:'🔑', label:'JWT'         },
-  graphql:    { bg:'rgba(225,0,152,.09)',    border:'rgba(225,0,152,.28)',    text:'#f472b6', icon:'◉',  label:'GraphQL'     },
+  jwt:          { bg:'rgba(234,179,8,.09)',    border:'rgba(234,179,8,.25)',    text:'#fde047', icon:'🔑', label:'JWT Auth'      },
+  graphql:      { bg:'rgba(225,0,152,.09)',    border:'rgba(225,0,152,.28)',    text:'#f472b6', icon:'◉',  label:'GraphQL'       },
+  typeorm:      { bg:'rgba(255,140,0,.09)',    border:'rgba(255,140,0,.25)',    text:'#fdba74', icon:'🗃',  label:'TypeORM'       },
+  prisma:       { bg:'rgba(255,255,255,.07)',  border:'rgba(255,255,255,.15)',  text:'#cbd5e1', icon:'◈',  label:'Prisma'        },
+  mongoose:     { bg:'rgba(0,237,100,.07)',    border:'rgba(0,237,100,.25)',    text:'#6ee7b7', icon:'◈',  label:'Mongoose'      },
+  s3compatible: { bg:'rgba(255,153,0,.09)',    border:'rgba(255,153,0,.25)',    text:'#fbbf24', icon:'🗂',  label:'S3 Compatible' },
+  websockets:   { bg:'rgba(139,92,246,.09)',   border:'rgba(139,92,246,.25)',   text:'#c4b5fd', icon:'⚡', label:'WebSockets'    },
+  queue:        { bg:'rgba(245,158,11,.09)',   border:'rgba(245,158,11,.25)',   text:'#fcd34d', icon:'◈',  label:'Queue'         },
+  swagger:      { bg:'rgba(133,230,56,.09)',   border:'rgba(133,230,56,.25)',   text:'#a3e635', icon:'📄', label:'Swagger'       },
 }
 
 function getTech(t: string): TechStyle {
@@ -158,9 +166,10 @@ function ServiceCard({ node, pos, isRunning, selected, onSelect, onDragStart, ca
         {col.label}{node.tech.includes('docker') ? ' · Docker' : ''}
       </div>
 
-      {/* Port badge */}
+      {/* Port badges */}
       {node.port && (
         <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:11 }}>
+          {/* Primary port — green when live */}
           <span style={{
             fontFamily:"'SF Mono','Fira Code',monospace", fontSize:10.5, fontWeight:600,
             padding:'2px 7px', borderRadius:5,
@@ -168,6 +177,15 @@ function ServiceCard({ node, pos, isRunning, selected, onSelect, onDragStart, ca
             border: `1px solid ${isRunning ? 'rgba(16,185,129,.3)' : 'rgba(255,255,255,.07)'}`,
             color: isRunning ? '#34d399' : '#64748b',
           }}>:{node.port}</span>
+          {/* Extra ports (e.g. MinIO :9001 console) */}
+          {(node.extraPorts ?? []).map(ep => (
+            <span key={ep.port} style={{
+              fontFamily:"'SF Mono','Fira Code',monospace", fontSize:10.5,
+              padding:'2px 7px', borderRadius:5,
+              background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.07)',
+              color:'#475569',
+            }}>:{ep.port}{ep.label ? ` ${ep.label}` : ''}</span>
+          ))}
         </div>
       )}
 

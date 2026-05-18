@@ -82,6 +82,60 @@ function sortScripts(scripts: Record<string, string>, type: ProjectType): string
   return [...keys.filter(k => priority.includes(k)), ...keys.filter(k => !priority.includes(k))]
 }
 
+// ─── Script grouping for monorepos ─────────────────────────────────────────
+
+type ScriptGroup = 'database' | 'backend' | 'frontend' | 'worker' | 'general'
+
+const GROUP_META: Record<ScriptGroup, { label: string; color: string; bg: string }> = {
+  database: { label: 'DATABASE', color: '#ec4899', bg: '#ec489912' },
+  backend:  { label: 'BACKEND',  color: '#22c55e', bg: '#22c55e12' },
+  frontend: { label: 'FRONTEND', color: '#3b82f6', bg: '#3b82f612' },
+  worker:   { label: 'WORKER',   color: '#f59e0b', bg: '#f59e0b12' },
+  general:  { label: '',         color: '',         bg: ''          },
+}
+
+function classifyScript(key: string): ScriptGroup {
+  const k = key.toLowerCase()
+
+  // Database
+  if (/^(db|prisma|migrate|seed|schema|knex|typeorm|sequelize)(:|$)/.test(k)) return 'database'
+  if (/(:|^)(migrate|seed|migration|db)$/.test(k))                            return 'database'
+  if (/^(db:up|db:down|db:reset|db:push|db:pull)$/.test(k))                  return 'database'
+
+  // Backend
+  if (/^(api|server|backend|srv)(:|$)/.test(k))                              return 'backend'
+  if (/(:|^)(api|server|backend|srv)$/.test(k))                              return 'backend'
+
+  // Frontend
+  if (/^(web|client|app|front|ui|spa)(:|$)/.test(k))                        return 'frontend'
+  if (/(:|^)(web|client|app|front|ui|spa)$/.test(k))                        return 'frontend'
+
+  // Worker
+  if (/^(worker|queue|job|consumer|producer|cron)(:|$)/.test(k))            return 'worker'
+  if (/(:|^)(worker|queue|job|worker)$/.test(k))                            return 'worker'
+
+  return 'general'
+}
+
+function groupScripts(keys: string[]): { group: ScriptGroup; scripts: string[] }[] {
+  const buckets = new Map<ScriptGroup, string[]>()
+  const ORDER: ScriptGroup[] = ['database', 'backend', 'frontend', 'worker', 'general']
+
+  for (const k of keys) {
+    const g = classifyScript(k)
+    if (!buckets.has(g)) buckets.set(g, [])
+    buckets.get(g)!.push(k)
+  }
+
+  // Only show groups that have scripts; keep order
+  return ORDER.filter(g => buckets.has(g)).map(g => ({ group: g, scripts: buckets.get(g)! }))
+}
+
+// Returns true if ANY script key has a non-general group → it's a monorepo-like project
+function isMonorepoLike(keys: string[]): boolean {
+  return keys.some(k => classifyScript(k) !== 'general')
+}
+
 function parseDisplay(scriptKey: string, command: string, type: ProjectType) {
   const meta = TYPE_META[type]
   if (type === 'npm') return { prefix: 'npm run', cmd: scriptKey }
@@ -197,42 +251,68 @@ export function ProjectCard({ project }: Props) {
     return <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: 12 }}>No scripts found</div>
   }
 
-  const defaultPort  = getDefaultPort(frameworks)
+  const defaultPort = getDefaultPort(frameworks)
+  const isJava      = type === 'maven' || type === 'gradle'
+  const monorepo    = isMonorepoLike(scripts)
+  const grouped     = monorepo ? groupScripts(scripts) : [{ group: 'general' as ScriptGroup, scripts }]
 
   return (
     <>
-      {scripts.map((scriptKey) => {
-        const status     = getStatus(scriptKey)
-        const key        = getKey(scriptKey)
-        const isRunning  = status === 'running'
-        const isError    = status === 'error'
-        const isSelected = openLogs.includes(key)
-        const pillClass  = isRunning ? 'active' : isError ? 'error' : 'idle'
-        const command    = project.scripts[scriptKey] ?? `npm run ${scriptKey}`
-        const { prefix, cmd } = parseDisplay(scriptKey, command, type)
-        const showBrowser = isFrontend && isDevServerScript(scriptKey) && isRunning
-
-        // Java projects: RUN always restarts if already running
-        const isJava = type === 'maven' || type === 'gradle'
-
+      {grouped.map(({ group, scripts: groupKeys }) => {
+        const meta = GROUP_META[group]
         return (
-          <ScriptRow
-            key={scriptKey}
-            scriptKey={scriptKey}
-            processKey={key}
-            prefix={prefix}
-            cmd={cmd}
-            status={pillClass}
-            isRunning={isRunning}
-            isSelected={isSelected}
-            showBrowser={showBrowser}
-            defaultPort={defaultPort}
-            restartOnRun={isJava}
-            onLogs={() => activeLog === key ? setActiveLog(null) : openLog(key)}
-            onStart={() => isJava && isRunning ? restart(scriptKey) : start(scriptKey)}
-            onStop={() => stop(scriptKey)}
-            onRestart={() => restart(scriptKey)}
-          />
+          <div key={group}>
+            {/* Group header — only for non-general when monorepo detected */}
+            {monorepo && group !== 'general' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 20px 4px',
+                marginTop: group === grouped[0].group ? 0 : 2,
+                background: meta.bg,
+                borderTop: `1px solid ${meta.color}22`,
+                borderBottom: `1px solid ${meta.color}22`,
+              }}>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+                  color: meta.color,
+                }}>{meta.label}</span>
+                <span style={{ flex: 1, height: 1, background: `${meta.color}20` }} />
+                <span style={{ fontSize: 9, color: `${meta.color}80` }}>{groupKeys.length} scripts</span>
+              </div>
+            )}
+
+            {groupKeys.map((scriptKey) => {
+              const status     = getStatus(scriptKey)
+              const key        = getKey(scriptKey)
+              const isRunning  = status === 'running'
+              const isError    = status === 'error'
+              const isSelected = openLogs.includes(key)
+              const pillClass  = isRunning ? 'active' : isError ? 'error' : 'idle'
+              const command    = project.scripts[scriptKey] ?? `npm run ${scriptKey}`
+              const { prefix, cmd } = parseDisplay(scriptKey, command, type)
+              const showBrowser = isFrontend && isDevServerScript(scriptKey) && isRunning
+
+              return (
+                <ScriptRow
+                  key={scriptKey}
+                  scriptKey={scriptKey}
+                  processKey={key}
+                  prefix={prefix}
+                  cmd={cmd}
+                  status={pillClass}
+                  isRunning={isRunning}
+                  isSelected={isSelected}
+                  showBrowser={showBrowser}
+                  defaultPort={defaultPort}
+                  restartOnRun={isJava}
+                  onLogs={() => activeLog === key ? setActiveLog(null) : openLog(key)}
+                  onStart={() => isJava && isRunning ? restart(scriptKey) : start(scriptKey)}
+                  onStop={() => stop(scriptKey)}
+                  onRestart={() => restart(scriptKey)}
+                />
+              )
+            })}
+          </div>
         )
       })}
     </>

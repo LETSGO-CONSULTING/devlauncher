@@ -12,9 +12,10 @@ interface Props {
   group: ProjectGroupType
   onRemove: () => void
   selected?: boolean
+  onShowMap?: () => void
 }
 
-export function ProjectGroup({ group, onRemove, selected }: Props) {
+export function ProjectGroup({ group, onRemove, selected, onShowMap }: Props) {
   const { statuses, runtimeVersions, setRuntimeVersion } = useStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [editors, setEditors] = useState<Editor[]>([])
@@ -116,6 +117,14 @@ export function ProjectGroup({ group, onRemove, selected }: Props) {
             className={`group-status-dot${isRunning ? ' running' : ''}`}
             title={isRunning ? `${runningCount} running` : 'Stopped'}
           />
+          {onShowMap && (
+            <button
+              className="group-action-btn"
+              title="View project map"
+              onClick={onShowMap}
+              style={{ fontSize: 13 }}
+            >🗺</button>
+          )}
           <button className="group-action-btn" title="Expand all" onClick={expandAll}>↓↓</button>
           <button className="group-action-btn" title="Collapse all" onClick={collapseAll}>↑↑</button>
           <button

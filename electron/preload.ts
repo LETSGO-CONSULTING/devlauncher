@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowMinimize: () => ipcRenderer.invoke('window-minimize'),
   windowClose:    () => ipcRenderer.invoke('window-close'),
 
+  // ── Project graph ─────────────────────────────────────────
+  getProjectGraph: () => ipcRenderer.invoke('get-project-graph'),
+
   // ── Editors ───────────────────────────────────────────────
   detectEditors: () => ipcRenderer.invoke('detect-editors'),
   openInEditor: (projectPath: string, bin: string) => ipcRenderer.invoke('open-in-editor', projectPath, bin),

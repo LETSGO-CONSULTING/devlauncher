@@ -1319,3 +1319,161 @@ ipcMain.handle('open-in-editor', (_e, projectPath: string, bin: string) => {
     return { error: (e as Error).message }
   }
 })
+
+// ─── Project graph (mind map) ──────────────────────────────────────────────
+
+type NodeRole = 'frontend' | 'backend' | 'fullstack' | 'database' | 'cache' | 'unknown'
+
+interface GraphNode {
+  id:       string
+  label:    string
+  role:     NodeRole
+  path:     string
+  port?:    number
+  tech:     string[]
+  envVars:  Record<string, string>
+}
+
+interface GraphEdge {
+  source: string
+  target: string
+  label:  string
+}
+
+interface ProjectGraph {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+const FRONTEND_FRAMEWORKS  = new Set(['react','vue','angular','svelte','astro','vite'])
+const BACKEND_FRAMEWORKS   = new Set(['express','fastify','nestjs','django','flask','fastapi','rails','spring','laravel','symfony','go','rust'])
+const FULLSTACK_FRAMEWORKS = new Set(['nextjs','nuxt','electron'])
+
+const DB_ENV_PATTERNS = [
+  { pattern: /DATABASE_URL|POSTGRES_URL|PG_URL/i,       label: 'PostgreSQL', role: 'database' as NodeRole },
+  { pattern: /MONGO(DB)?_URI|MONGO_URL/i,               label: 'MongoDB',    role: 'database' as NodeRole },
+  { pattern: /MYSQL_URL|DB_URL/i,                       label: 'MySQL',      role: 'database' as NodeRole },
+  { pattern: /REDIS_URL|REDIS_URI/i,                    label: 'Redis',      role: 'cache'    as NodeRole },
+  { pattern: /SUPABASE_URL/i,                           label: 'Supabase',   role: 'database' as NodeRole },
+  { pattern: /FIREBASE_URL|FIREBASE_PROJECT/i,          label: 'Firebase',   role: 'database' as NodeRole },
+]
+
+const API_ENV_PATTERNS = [
+  /REACT_APP_API_URL/i,
+  /VITE_API_URL|VITE_APP_API/i,
+  /NEXT_PUBLIC_API/i,
+  /VUE_APP_API/i,
+  /API_URL|API_BASE_URL|BACKEND_URL/i,
+]
+
+function parseEnvFile(projectPath: string): Record<string, string> {
+  const envFiles = ['.env', '.env.local', '.env.development']
+  const result: Record<string, string> = {}
+  for (const f of envFiles) {
+    const fp = path.join(projectPath, f)
+    if (!fs.existsSync(fp)) continue
+    try {
+      const lines = fs.readFileSync(fp, 'utf-8').split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const eq = trimmed.indexOf('=')
+        if (eq === -1) continue
+        const key = trimmed.slice(0, eq).trim()
+        const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '')
+        result[key] = val
+      }
+    } catch { /* ignore unreadable */ }
+  }
+  return result
+}
+
+function classifyRole(frameworks: Framework[], envVars: Record<string, string>): NodeRole {
+  const fws = new Set(frameworks)
+  const isFront   = [...fws].some(f => FRONTEND_FRAMEWORKS.has(f))
+  const isBack    = [...fws].some(f => BACKEND_FRAMEWORKS.has(f))
+  const isFull    = [...fws].some(f => FULLSTACK_FRAMEWORKS.has(f))
+  if (isFull) return 'fullstack'
+  if (isFront && isBack) return 'fullstack'
+  if (isFront) return 'frontend'
+  if (isBack)  return 'backend'
+  // Infer from env vars
+  const keys = Object.keys(envVars).join('|')
+  if (/EXPRESS|DJANGO|RAILS|SPRING|FLASK|FASTAPI/i.test(keys)) return 'backend'
+  if (/REACT|VUE|ANGULAR|SVELTE/i.test(keys)) return 'frontend'
+  return 'unknown'
+}
+
+function extractPort(envVars: Record<string, string>): number | undefined {
+  const raw = envVars['PORT'] ?? envVars['SERVER_PORT'] ?? envVars['APP_PORT']
+  if (raw) {
+    const n = parseInt(raw, 10)
+    if (!isNaN(n)) return n
+  }
+}
+
+function extractUrlPort(url: string): number | undefined {
+  try {
+    const u = new URL(url)
+    const p = parseInt(u.port, 10)
+    return isNaN(p) ? undefined : p
+  } catch { return undefined }
+}
+
+ipcMain.handle('get-project-graph', (): ProjectGraph => {
+  const groups = loadGroups()
+  const nodes: GraphNode[] = []
+  const edges: GraphEdge[]  = []
+  const dbNodes = new Map<string, string>() // label → node id
+
+  for (const group of groups) {
+    for (const project of group.projects) {
+      const envVars  = parseEnvFile(project.path)
+      const role     = classifyRole(project.frameworks ?? [], envVars)
+      const port     = extractPort(envVars)
+
+      nodes.push({
+        id:      project.id,
+        label:   project.name,
+        role,
+        path:    project.path,
+        port,
+        tech:    project.frameworks ?? [],
+        envVars,
+      })
+    }
+  }
+
+  // Second pass: infer edges
+  for (const node of nodes) {
+    const env = node.envVars
+
+    // DB / cache edges
+    for (const { pattern, label, role } of DB_ENV_PATTERNS) {
+      const match = Object.keys(env).find(k => pattern.test(k))
+      if (!match) continue
+      let dbId = dbNodes.get(label)
+      if (!dbId) {
+        dbId = `db-${label.toLowerCase()}`
+        dbNodes.set(label, dbId)
+        nodes.push({ id: dbId, label, role, path: '', tech: [label.toLowerCase()], envVars: {} })
+      }
+      edges.push({ source: node.id, target: dbId, label: match })
+    }
+
+    // API URL edges → find matching backend by port
+    for (const pat of API_ENV_PATTERNS) {
+      const key = Object.keys(env).find(k => pat.test(k))
+      if (!key) continue
+      const val  = env[key]
+      const port = extractUrlPort(val)
+      if (!port) continue
+      const target = nodes.find(n => n.id !== node.id && n.port === port)
+      if (target) {
+        edges.push({ source: node.id, target: target.id, label: key })
+      }
+    }
+  }
+
+  return { nodes, edges }
+})

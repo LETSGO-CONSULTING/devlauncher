@@ -7,6 +7,7 @@ import { ProjectGroup } from './components/ProjectGroup'
 import { Dashboard } from './components/Dashboard'
 import { SDKManager } from './components/SDKManager'
 import { InfraManager } from './components/InfraManager'
+import ProjectMap from './components/ProjectMap'
 import { UpgradeModal } from './components/UpgradeModal'
 import { ProjectGroup as ProjectGroupType } from './types'
 import { canAddGroup } from './lib/license'
@@ -57,6 +58,7 @@ declare global {
       licenseGet: () => Promise<{ tier: string; expiresAt?: string | null; expired?: boolean }>
       licenseActivate: (key: string) => Promise<{ success?: boolean; tier?: string; expiresAt?: string; error?: string }>
       licenseDeactivate: () => Promise<{ success?: boolean; error?: string }>
+      getProjectGraph: () => Promise<{ nodes: unknown[]; edges: unknown[] }>
       onProcessLog: (cb: (p: { key: string; data: string; type: 'stdout' | 'stderr' }) => void) => () => void
       onProcessExit: (cb: (p: { key: string; code: number | null }) => void) => () => void
       onProcessStarted: (cb: (p: { key: string; pid: number | null }) => void) => () => void
@@ -83,7 +85,7 @@ function processLabel(
 
 export default function App() {
   const { groups, setGroups, addGroup, removeGroup, setStatus, appendLog, openLog, closeLog, setActiveLog, openLogs, activeLog, setPid, logLabels, tier, setTier } = useStore()
-  const [sidebarTab, setSidebarTab] = useState<'dashboard' | 'projects' | 'sdks' | 'infra' | 'console'>('dashboard')
+  const [sidebarTab, setSidebarTab] = useState<'dashboard' | 'projects' | 'map' | 'sdks' | 'infra' | 'console'>('dashboard')
   const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
   const [overlayHeight, setOverlayHeight] = useState(320)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
@@ -168,7 +170,7 @@ export default function App() {
         onAddProject={handleAdd}
         onRemove={handleRemove}
         activeTab={sidebarTab}
-        onTabChange={(tab) => setSidebarTab(tab as 'dashboard' | 'projects' | 'sdks' | 'infra' | 'console')}
+        onTabChange={(tab) => setSidebarTab(tab as 'dashboard' | 'projects' | 'map' | 'sdks' | 'infra' | 'console')}
         onSelectGroup={(id) => { setSelectedGroupId(id); setSidebarTab('projects') }}
         selectedGroupId={selectedGroupId}
       />
@@ -194,6 +196,13 @@ export default function App() {
 
         {/* ── Infra tab ─────────────────────────────────────────────── */}
         {sidebarTab === 'infra' && <InfraManager />}
+
+        {/* ── Map tab ────────────────────────────────────────────────── */}
+        {sidebarTab === 'map' && (
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <ProjectMap />
+          </div>
+        )}
 
         {/* ── Projects tab ──────────────────────────────────────────── */}
         {sidebarTab === 'projects' && (
@@ -224,7 +233,13 @@ export default function App() {
                 <div className={viewMode === 'grid' ? 'cards-grid' : ''}
                   style={viewMode === 'list' ? { display: 'flex', flexDirection: 'column', gap: 12 } : {}}>
                   {groups.map((g) => (
-                    <ProjectGroup key={g.id} group={g} onRemove={() => handleRemove(g.id)} selected={selectedGroupId === g.id} />
+                    <ProjectGroup
+                      key={g.id}
+                      group={g}
+                      onRemove={() => handleRemove(g.id)}
+                      selected={selectedGroupId === g.id}
+                      onShowMap={() => setSidebarTab('map')}
+                    />
                   ))}
                 </div>
               )}

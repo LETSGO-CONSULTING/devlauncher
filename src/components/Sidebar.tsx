@@ -66,6 +66,7 @@ export function Sidebar({ groups, onAddProject, activeTab, onTabChange, onSelect
   const navItems = [
     { id: 'dashboard', label: 'Dashboard',   icon: '⊞' },
     { id: 'projects',  label: 'Projects',    icon: '▣' },
+    { id: 'map',       label: 'Map',         icon: '🗺' },
     { id: 'sdks',      label: 'SDK Manager', icon: '📦' },
     { id: 'infra',     label: 'Infra',       icon: '🐳' },
     { id: 'console',   label: 'Console',     icon: '⬛' },

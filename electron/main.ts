@@ -1407,10 +1407,24 @@ function classifyRole(frameworks: Framework[], envVars: Record<string, string>):
 }
 
 function extractPort(envVars: Record<string, string>): number | undefined {
-  const raw = envVars['PORT'] ?? envVars['SERVER_PORT'] ?? envVars['APP_PORT']
-  if (raw) {
+  const candidates = [
+    'PORT', 'SERVER_PORT', 'APP_PORT', 'DEV_PORT',
+    'NEXT_PORT', 'VITE_PORT', 'EXPO_PORT',
+    'REACT_APP_PORT', 'VUE_APP_PORT', 'API_PORT',
+    'HTTP_PORT', 'WEB_PORT', 'CLIENT_PORT',
+  ]
+  for (const k of candidates) {
+    const raw = envVars[k]
+    if (!raw) continue
     const n = parseInt(raw, 10)
-    if (!isNaN(n)) return n
+    if (!isNaN(n) && n > 0) return n
+  }
+  // Also scan any key ending in _PORT
+  for (const [k, v] of Object.entries(envVars)) {
+    if (/_PORT$/i.test(k)) {
+      const n = parseInt(v, 10)
+      if (!isNaN(n) && n > 0) return n
+    }
   }
 }
 

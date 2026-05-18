@@ -219,12 +219,17 @@ function edgeColor(label: string): string {
 
 const PARTICLES = [0, 0.4, 0.7]
 
-function EnergyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps) {
-  const d       = data as { label?: string; animated?: boolean }
-  const label   = d.label ?? ''
-  const live    = d.animated ?? false
-  const color   = edgeColor(label)
-  const dur     = 2
+function isProjectRunning(nodeId: string, statuses: Record<string, string>): boolean {
+  return Object.entries(statuses).some(([k, v]) => k.startsWith(nodeId + ':') && v === 'running')
+}
+
+function EnergyEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps) {
+  const d        = data as { label?: string }
+  const label    = d.label ?? ''
+  const statuses = useStore(s => s.statuses)
+  const live     = isProjectRunning(source, statuses) && isProjectRunning(target, statuses)
+  const color    = edgeColor(label)
+  const dur      = 2
 
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
 
@@ -459,31 +464,26 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
 
   const { nodes: fn, edges: fe } = buildLayout(groupNodes, groupEdges, onSelect)
 
-  // Inject isRunning into node data
-  const fnWithStatus = fn.map(n => ({
-    ...n,
-    data: { ...n.data, isRunning: isNodeRunning(n.id) },
-    style: {
-      ...n.style,
-      boxShadow: isNodeRunning(n.id)
-        ? `0 0 14px ${ROLE_COLOR[(n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'].glow}, 0 0 4px ${ROLE_COLOR[(n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'].border}60`
-        : `0 0 4px #00000040`,
-    },
-  }))
-
-  // Animate edges only when BOTH endpoints are running
-  const feWithStatus = fe.map(e => ({
-    ...e,
-    data: {
-      ...(e.data as object),
-      animated: isNodeRunning(e.source) && isNodeRunning(e.target),
-    },
-  }))
+  // Inject isRunning into node data for ServiceNode dot/glow
+  const fnWithStatus = fn.map(n => {
+    const running = isNodeRunning(n.id)
+    const role    = (n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'
+    return {
+      ...n,
+      data: { ...n.data, isRunning: running },
+      style: {
+        ...n.style,
+        boxShadow: running
+          ? `0 0 14px ${ROLE_COLOR[role].glow}, 0 0 4px ${ROLE_COLOR[role].border}60`
+          : '0 0 4px #00000040',
+      },
+    }
+  })
 
   const [nodes, setNodes, onNodesChange] = useNodesState(fnWithStatus)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(feWithStatus)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(fe)
 
-  // Sync running status live without rebuilding layout
+  // Sync node running status (glow + dot) when statuses change
   useEffect(() => {
     setNodes(nds => nds.map(n => {
       const running = isNodeRunning(n.id)
@@ -499,11 +499,7 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
         },
       }
     }))
-    setEdges(eds => eds.map(e => ({
-      ...e,
-      data: { ...(e.data as object), animated: isNodeRunning(e.source) && isNodeRunning(e.target) },
-    })))
-  }, [statuses, isNodeRunning, setNodes, setEdges])
+  }, [statuses, isNodeRunning, setNodes])
 
   const onNodeClick: NodeMouseHandler = useCallback((_e, node) => {
     const raw = groupNodes.find(n => n.id === node.id)

@@ -1466,7 +1466,8 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
           groupDbNodes.set(label, dbId)
           nodes.push({ id: dbId, label, role, path: '', tech: [label.toLowerCase()], envVars: {}, groupId: group.id, groupName: group.name })
         }
-        edges.push({ source: node.id, target: dbId, label: match })
+        // Flow direction: DB/cache → service (data comes FROM db)
+        edges.push({ source: dbId, target: node.id, label: match })
       }
 
       // API URL edges — only match within same group
@@ -1476,9 +1477,11 @@ ipcMain.handle('get-project-graph', (): ProjectGraph => {
         const val  = env[key]
         const port = extractUrlPort(val)
         if (!port) continue
-        const target = groupNodes.find(n => n.id !== node.id && n.port === port)
-        if (target) {
-          edges.push({ source: node.id, target: target.id, label: key })
+        // node is the consumer (frontend), target is the producer (backend)
+        // Flow direction: backend → frontend
+        const backend = groupNodes.find(n => n.id !== node.id && n.port === port)
+        if (backend) {
+          edges.push({ source: backend.id, target: node.id, label: key })
         }
       }
     }

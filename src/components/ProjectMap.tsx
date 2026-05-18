@@ -6,7 +6,6 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
-  addEdge,
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
@@ -15,7 +14,6 @@ import {
   Position,
   type Node,
   type Edge,
-  type Connection,
   type EdgeProps,
   type NodeMouseHandler,
   type NodeProps,
@@ -76,9 +74,10 @@ const HANDLE_STYLE: React.CSSProperties = {
 }
 
 function ServiceNode({ data, selected }: NodeProps) {
-  const d   = data as { graphNode: GraphNode; onSelect: (n: GraphNode) => void }
-  const n   = d.graphNode
-  const col = ROLE_COLOR[n.role]
+  const d       = data as { graphNode: GraphNode; onSelect: (n: GraphNode) => void; isRunning: boolean }
+  const n       = d.graphNode
+  const col     = ROLE_COLOR[n.role]
+  const running = d.isRunning
 
   return (
     <>
@@ -89,38 +88,45 @@ function ServiceNode({ data, selected }: NodeProps) {
         lineStyle={{ borderColor: col.border, borderWidth: 1 }}
       />
 
-      {/* Handles — all 4 sides */}
-      <Handle type="source" position={Position.Top}    id="t" style={{ ...HANDLE_STYLE, top: -4 }} />
-      <Handle type="source" position={Position.Right}  id="r" style={{ ...HANDLE_STYLE, right: -4 }} />
-      <Handle type="source" position={Position.Bottom} id="b" style={{ ...HANDLE_STYLE, bottom: -4 }} />
-      <Handle type="source" position={Position.Left}   id="l" style={{ ...HANDLE_STYLE, left: -4 }} />
-      <Handle type="target" position={Position.Top}    id="tt" style={{ ...HANDLE_STYLE, top: -4 }} />
-      <Handle type="target" position={Position.Right}  id="tr" style={{ ...HANDLE_STYLE, right: -4 }} />
-      <Handle type="target" position={Position.Bottom} id="tb" style={{ ...HANDLE_STYLE, bottom: -4 }} />
-      <Handle type="target" position={Position.Left}   id="tl" style={{ ...HANDLE_STYLE, left: -4 }} />
+      {/* Handles — all 4 sides, source+target so edges can reconnect from any side */}
+      {(['Top','Right','Bottom','Left'] as const).map(pos => (
+        <span key={pos}>
+          <Handle type="source" position={Position[pos]} id={`s-${pos}`}
+            style={{ ...HANDLE_STYLE, ...(pos==='Top'?{top:-4}:pos==='Right'?{right:-4}:pos==='Bottom'?{bottom:-4}:{left:-4}) }} />
+          <Handle type="target" position={Position[pos]} id={`t-${pos}`}
+            style={{ ...HANDLE_STYLE, ...(pos==='Top'?{top:-4}:pos==='Right'?{right:-4}:pos==='Bottom'?{bottom:-4}:{left:-4}) }} />
+        </span>
+      ))}
 
       <div
         onClick={() => d.onSelect(n)}
-        style={{
-          width: '100%', height: '100%',
-          padding: '8px 10px',
-          display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          cursor: 'pointer',
-        }}
+        style={{ width: '100%', height: '100%', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center', cursor: 'pointer' }}
       >
-        <div style={{ fontWeight: 700, fontSize: 11, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {n.label}
+        {/* Name + running indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {running && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', flexShrink: 0, boxShadow: '0 0 5px #22c55e' }} />}
+          <span style={{ fontWeight: 700, fontSize: 11, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {n.label}
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+
+        {/* Port + tech */}
+        <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
           {n.port && (
-            <span style={{ fontSize: 9, color: '#475569', fontFamily: 'monospace' }}>:{n.port}</span>
+            <span style={{
+              fontSize: 10, fontFamily: 'monospace', fontWeight: 700,
+              padding: '1px 5px', borderRadius: 3,
+              background: `${col.border}25`,
+              border: `1px solid ${col.border}50`,
+              color: col.text,
+            }}>:{n.port}</span>
           )}
           {n.tech.slice(0, 2).map(t => (
             <span key={t} style={{
               fontSize: 9, padding: '0 4px',
-              background: `${col.border}18`,
-              border: `1px solid ${col.border}30`,
-              borderRadius: 3, color: col.text,
+              background: `${col.border}10`,
+              border: `1px solid ${col.border}20`,
+              borderRadius: 3, color: `${col.text}99`,
             }}>{t}</span>
           ))}
         </div>
@@ -214,33 +220,45 @@ function edgeColor(label: string): string {
 const PARTICLES = [0, 0.4, 0.7]
 
 function EnergyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps) {
-  const label = (data as { label?: string })?.label ?? ''
-  const color = edgeColor(label)
-  const dur   = 2
+  const d       = data as { label?: string; animated?: boolean }
+  const label   = d.label ?? ''
+  const live    = d.animated ?? false
+  const color   = edgeColor(label)
+  const dur     = 2
 
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={{ stroke: `${color}20`, strokeWidth: 1 }} />
-      <path d={edgePath} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.5}
-        strokeDasharray="5 8" style={{ animation: `dashFlow ${dur}s linear infinite` }} />
-      <g>
-        {PARTICLES.map((offset, i) => (
-          <circle key={i} r={3} fill={color} style={{ filter: `drop-shadow(0 0 4px ${color})` }}>
-            <animateMotion dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" path={edgePath} />
-            <animate attributeName="opacity" values="0;1;1;0" dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" />
-          </circle>
-        ))}
-      </g>
+      {/* Base dim path — always visible */}
+      <BaseEdge id={id} path={edgePath} style={{ stroke: live ? `${color}30` : '#1e2d4560', strokeWidth: 1 }} />
+
+      {/* Animated dash — only when live */}
+      {live && (
+        <path d={edgePath} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.5}
+          strokeDasharray="5 8" style={{ animation: `dashFlow ${dur}s linear infinite` }} />
+      )}
+
+      {/* Particles — only when live */}
+      {live && (
+        <g>
+          {PARTICLES.map((offset, i) => (
+            <circle key={i} r={3} fill={color} style={{ filter: `drop-shadow(0 0 4px ${color})` }}>
+              <animateMotion dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" path={edgePath} />
+              <animate attributeName="opacity" values="0;1;1;0" dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" />
+            </circle>
+          ))}
+        </g>
+      )}
+
       <EdgeLabelRenderer>
         <div style={{
           position: 'absolute',
           transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`,
-          fontSize: 9, color,
+          fontSize: 9, color: live ? color : '#334155',
           background: '#090e1a', padding: '1px 5px', borderRadius: 3,
-          border: `1px solid ${color}30`, pointerEvents: 'none', whiteSpace: 'nowrap',
-          opacity: 0.85,
+          border: `1px solid ${live ? color + '30' : '#1e2d45'}`,
+          pointerEvents: 'none', whiteSpace: 'nowrap',
         }} className="nodrag nopan">
           {label}
         </div>
@@ -426,6 +444,7 @@ const CSS = `
 
 function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNodes: GraphNode[]; allEdges: GraphEdge[] }) {
   const [selected, setSelected] = useState<GraphNode | null>(null)
+  const statuses = useStore(s => s.statuses)
 
   const groupNodes = allNodes.filter(n => n.groupId === groupId)
   const groupIds   = new Set(groupNodes.map(n => n.id))
@@ -433,28 +452,70 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
 
   const onSelect = useCallback((n: GraphNode) => setSelected(n), [])
 
+  // Determine running status per node (any script running = node is live)
+  const isNodeRunning = useCallback((nodeId: string) =>
+    Object.entries(statuses).some(([k, v]) => k.startsWith(nodeId + ':') && v === 'running'),
+  [statuses])
+
   const { nodes: fn, edges: fe } = buildLayout(groupNodes, groupEdges, onSelect)
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(fn)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(fe)
+  // Inject isRunning into node data
+  const fnWithStatus = fn.map(n => ({
+    ...n,
+    data: { ...n.data, isRunning: isNodeRunning(n.id) },
+    style: {
+      ...n.style,
+      boxShadow: isNodeRunning(n.id)
+        ? `0 0 14px ${ROLE_COLOR[(n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'].glow}, 0 0 4px ${ROLE_COLOR[(n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'].border}60`
+        : `0 0 4px #00000040`,
+    },
+  }))
 
-  const onConnect = useCallback(
-    (p: Connection) => setEdges(eds => addEdge({ ...p, type: 'energy', data: { label: '' } }, eds)),
-    [setEdges],
-  )
+  // Animate edges only when BOTH endpoints are running
+  const feWithStatus = fe.map(e => ({
+    ...e,
+    data: {
+      ...(e.data as object),
+      animated: isNodeRunning(e.source) && isNodeRunning(e.target),
+    },
+  }))
 
-  // Update onSelect ref in node data when selection changes (avoid stale closure)
+  const [nodes, setNodes, onNodesChange] = useNodesState(fnWithStatus)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(feWithStatus)
+
+  // Sync running status live without rebuilding layout
   useEffect(() => {
-    setNodes(nds => nds.map(nd => nd.type === 'service'
-      ? { ...nd, data: { ...nd.data, onSelect } }
-      : nd
-    ))
-  }, [onSelect, setNodes])
+    setNodes(nds => nds.map(n => {
+      const running = isNodeRunning(n.id)
+      const role    = (n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'
+      return {
+        ...n,
+        data: { ...n.data, isRunning: running },
+        style: {
+          ...n.style,
+          boxShadow: running
+            ? `0 0 14px ${ROLE_COLOR[role].glow}, 0 0 4px ${ROLE_COLOR[role].border}60`
+            : '0 0 4px #00000040',
+        },
+      }
+    }))
+    setEdges(eds => eds.map(e => ({
+      ...e,
+      data: { ...(e.data as object), animated: isNodeRunning(e.source) && isNodeRunning(e.target) },
+    })))
+  }, [statuses, isNodeRunning, setNodes, setEdges])
 
   const onNodeClick: NodeMouseHandler = useCallback((_e, node) => {
     const raw = groupNodes.find(n => n.id === node.id)
     if (raw) setSelected(raw)
   }, [groupNodes])
+
+  // Allow reconnecting existing edges to different handles, but no new connections
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConn: Connection) =>
+      setEdges(eds => eds.map(e => e.id === oldEdge.id ? { ...e, source: newConn.source ?? e.source, target: newConn.target ?? e.target, sourceHandle: newConn.sourceHandle, targetHandle: newConn.targetHandle } : e)),
+    [setEdges],
+  )
 
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -464,9 +525,10 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
           nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
+          onReconnect={onReconnect}
           onNodeClick={onNodeClick}
           onPaneClick={() => setSelected(null)}
+          nodesConnectable={false}
           fitView fitViewOptions={{ padding: 0.25 }}
           colorMode="dark"
           defaultEdgeOptions={{ type: 'energy' }}

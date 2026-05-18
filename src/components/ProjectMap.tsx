@@ -45,13 +45,13 @@ interface GraphEdge {
 
 // ─── Colors ────────────────────────────────────────────────────────────────
 
-const ROLE_COLOR: Record<NodeRole, { bg: string; border: string; text: string; glow: string; label: string }> = {
-  database:  { bg: '#1a0a12', border: '#ec4899', text: '#f9a8d4', glow: '#ec489940', label: 'Database' },
-  cache:     { bg: '#12081a', border: '#a855f7', text: '#d8b4fe', glow: '#a855f740', label: 'Cache'    },
-  backend:   { bg: '#081a0e', border: '#22c55e', text: '#86efac', glow: '#22c55e40', label: 'Backend'  },
-  fullstack: { bg: '#1a120a', border: '#f59e0b', text: '#fcd34d', glow: '#f59e0b40', label: 'Fullstack'},
-  frontend:  { bg: '#080f1a', border: '#3b82f6', text: '#93c5fd', glow: '#3b82f640', label: 'Frontend' },
-  unknown:   { bg: '#0f0f18', border: '#475569', text: '#94a3b8', glow: '#47556940', label: 'Unknown'  },
+const ROLE_COLOR: Record<NodeRole, { bg: string; border: string; text: string; glow: string; glowInner: string; label: string }> = {
+  database:  { bg: '#0c0c18', border: '#8b5cf6', text: '#c4b5fd', glow: 'rgba(139,92,246,.15)',  glowInner: 'rgba(139,92,246,.04)', label: 'Database'  },
+  cache:     { bg: '#0c0c18', border: '#f59e0b', text: '#fcd34d', glow: 'rgba(245,158,11,.15)',  glowInner: 'rgba(245,158,11,.04)', label: 'Cache'     },
+  backend:   { bg: '#0c0c18', border: '#10b981', text: '#6ee7b7', glow: 'rgba(16,185,129,.15)',  glowInner: 'rgba(16,185,129,.04)', label: 'Backend'   },
+  fullstack: { bg: '#0c0c18', border: '#f59e0b', text: '#fcd34d', glow: 'rgba(245,158,11,.15)',  glowInner: 'rgba(245,158,11,.04)', label: 'Fullstack' },
+  frontend:  { bg: '#0c0c18', border: '#3b82f6', text: '#93c5fd', glow: 'rgba(59,130,246,.15)',  glowInner: 'rgba(59,130,246,.04)', label: 'Frontend'  },
+  unknown:   { bg: '#0c0c18', border: '#475569', text: '#94a3b8', glow: 'rgba(71,85,105,.10)',   glowInner: 'rgba(71,85,105,.02)',  label: 'Service'   },
 }
 
 // Layout: DB(0) → Backend(1) → Fullstack(2) → Frontend(3)
@@ -64,41 +64,48 @@ const ROLE_COL: Record<NodeRole, number> = {
   frontend:  3,
 }
 
-// ─── Tech badge colors ─────────────────────────────────────────────────────
+// ─── Tech pill styles ──────────────────────────────────────────────────────
 
-const TECH_COLOR: Record<string, { bg: string; text: string; icon: string }> = {
-  react:      { bg: '#61DAFB18', text: '#61DAFB', icon: '⚛' },
-  nextjs:     { bg: '#ffffff10', text: '#e2e8f0', icon: '▲' },
-  vue:        { bg: '#42B88318', text: '#42B883', icon: '◈' },
-  nuxt:       { bg: '#00DC8218', text: '#00DC82', icon: '◈' },
-  angular:    { bg: '#DD003118', text: '#DD0031', icon: '◉' },
-  svelte:     { bg: '#FF3E0018', text: '#FF3E00', icon: '◈' },
-  vite:       { bg: '#BD34FE18', text: '#BD34FE', icon: '⚡' },
-  astro:      { bg: '#FF5D0118', text: '#FF5D01', icon: '🚀' },
-  nestjs:     { bg: '#E0234E18', text: '#E0234E', icon: '◉' },
-  express:    { bg: '#ffffff10', text: '#94a3b8', icon: '◈' },
-  fastify:    { bg: '#ffffff10', text: '#94a3b8', icon: '◈' },
-  django:     { bg: '#09352018', text: '#44b78b', icon: '◈' },
-  flask:      { bg: '#ffffff10', text: '#94a3b8', icon: '◈' },
-  fastapi:    { bg: '#00968818', text: '#00b8a9', icon: '⚡' },
-  rails:      { bg: '#CC000018', text: '#CC0000', icon: '◈' },
-  spring:     { bg: '#6DB33F18', text: '#6DB33F', icon: '◉' },
-  laravel:    { bg: '#FF2D2018', text: '#FF2D20', icon: '◉' },
-  typescript: { bg: '#3178C618', text: '#5b9bd5', icon: '🔷' },
-  javascript: { bg: '#F7DF1E18', text: '#d4b800', icon: '🔶' },
-  node:       { bg: '#339933', text: '#339933', icon: '◈' },
-  docker:     { bg: '#2496ED18', text: '#2496ED', icon: '🐳' },
-  go:         { bg: '#00ADD818', text: '#00ADD8', icon: '◈' },
-  rust:       { bg: '#CE412B18', text: '#CE412B', icon: '◈' },
-  python:     { bg: '#3776AB18', text: '#3776AB', icon: '🐍' },
-  ruby:       { bg: '#CC342D18', text: '#CC342D', icon: '💎' },
-  electron:   { bg: '#47848F18', text: '#47848F', icon: '⚡' },
-  php:        { bg: '#777BB418', text: '#8892BF', icon: '◈' },
-  laravel2:   { bg: '#FF2D2018', text: '#FF2D20', icon: '◉' },
+type TechStyle = { bg: string; border: string; text: string; icon: string; label?: string }
+
+const TECH_COLOR: Record<string, TechStyle> = {
+  react:      { bg: 'rgba(97,218,251,.08)',  border: 'rgba(97,218,251,.28)',  text: '#67e8f9', icon: '⚛',  label: 'React'      },
+  nextjs:     { bg: 'rgba(255,255,255,.05)', border: 'rgba(255,255,255,.13)', text: '#cbd5e1', icon: '▲',  label: 'Next.js'    },
+  vue:        { bg: 'rgba(66,184,131,.08)',  border: 'rgba(66,184,131,.28)',  text: '#4ade80', icon: '◈',  label: 'Vue'        },
+  nuxt:       { bg: 'rgba(0,220,130,.08)',   border: 'rgba(0,220,130,.28)',   text: '#34d399', icon: '◈',  label: 'Nuxt'       },
+  angular:    { bg: 'rgba(221,0,49,.10)',    border: 'rgba(221,0,49,.28)',    text: '#f87171', icon: '◉',  label: 'Angular'    },
+  svelte:     { bg: 'rgba(255,62,0,.08)',    border: 'rgba(255,62,0,.25)',    text: '#fb923c', icon: '◈',  label: 'Svelte'     },
+  vite:       { bg: 'rgba(189,52,254,.08)',  border: 'rgba(189,52,254,.25)',  text: '#c084fc', icon: '⚡', label: 'Vite'       },
+  astro:      { bg: 'rgba(255,93,1,.08)',    border: 'rgba(255,93,1,.25)',    text: '#fb923c', icon: '🚀', label: 'Astro'      },
+  nestjs:     { bg: 'rgba(231,0,43,.10)',    border: 'rgba(231,0,43,.28)',    text: '#f87171', icon: '◉',  label: 'NestJS'     },
+  express:    { bg: 'rgba(255,255,255,.05)', border: 'rgba(255,255,255,.10)', text: '#94a3b8', icon: '◈',  label: 'Express'    },
+  fastify:    { bg: 'rgba(255,255,255,.05)', border: 'rgba(255,255,255,.10)', text: '#94a3b8', icon: '⚡', label: 'Fastify'    },
+  django:     { bg: 'rgba(9,53,32,.18)',     border: 'rgba(68,183,139,.28)',  text: '#6ee7b7', icon: '◈',  label: 'Django'     },
+  flask:      { bg: 'rgba(255,255,255,.05)', border: 'rgba(255,255,255,.10)', text: '#94a3b8', icon: '◈',  label: 'Flask'      },
+  fastapi:    { bg: 'rgba(0,150,136,.09)',   border: 'rgba(0,184,169,.28)',   text: '#2dd4bf', icon: '⚡', label: 'FastAPI'    },
+  rails:      { bg: 'rgba(204,0,0,.09)',     border: 'rgba(204,0,0,.28)',     text: '#fca5a5', icon: '◈',  label: 'Rails'      },
+  spring:     { bg: 'rgba(109,179,63,.09)',  border: 'rgba(109,179,63,.28)',  text: '#86efac', icon: '◉',  label: 'Spring'     },
+  laravel:    { bg: 'rgba(255,45,32,.09)',   border: 'rgba(255,45,32,.28)',   text: '#fca5a5', icon: '◉',  label: 'Laravel'    },
+  typescript: { bg: 'rgba(49,120,198,.13)',  border: 'rgba(49,120,198,.35)',  text: '#60a5fa', icon: 'TS', label: 'TypeScript' },
+  javascript: { bg: 'rgba(247,223,30,.09)',  border: 'rgba(247,223,30,.25)',  text: '#fde047', icon: 'JS', label: 'JavaScript' },
+  node:       { bg: 'rgba(51,153,51,.09)',   border: 'rgba(51,153,51,.28)',   text: '#86efac', icon: '◈',  label: 'Node'       },
+  docker:     { bg: 'rgba(29,99,237,.09)',   border: 'rgba(29,99,237,.25)',   text: '#93c5fd', icon: '🐳', label: 'Docker'     },
+  go:         { bg: 'rgba(0,173,216,.09)',   border: 'rgba(0,173,216,.28)',   text: '#67e8f9', icon: '◈',  label: 'Go'         },
+  rust:       { bg: 'rgba(206,65,43,.09)',   border: 'rgba(206,65,43,.28)',   text: '#fca5a5', icon: '◈',  label: 'Rust'       },
+  python:     { bg: 'rgba(55,118,171,.13)',  border: 'rgba(55,118,171,.35)',  text: '#7dd3fc', icon: '🐍', label: 'Python'     },
+  ruby:       { bg: 'rgba(204,52,45,.09)',   border: 'rgba(204,52,45,.28)',   text: '#fca5a5', icon: '💎', label: 'Ruby'       },
+  electron:   { bg: 'rgba(71,132,143,.09)',  border: 'rgba(71,132,143,.28)',  text: '#67e8f9', icon: '⚡', label: 'Electron'   },
+  php:        { bg: 'rgba(119,123,180,.09)', border: 'rgba(136,146,191,.28)', text: '#a5b4fc', icon: '◈',  label: 'PHP'        },
+  postgres:   { bg: 'rgba(51,103,145,.13)',  border: 'rgba(51,103,145,.35)',  text: '#7dd3fc', icon: '🐘', label: 'PostgreSQL' },
+  mysql:      { bg: 'rgba(0,117,143,.09)',   border: 'rgba(0,117,143,.28)',   text: '#67e8f9', icon: '🐬', label: 'MySQL'      },
+  redis:      { bg: 'rgba(220,50,50,.09)',   border: 'rgba(220,50,50,.28)',   text: '#fca5a5', icon: '◈',  label: 'Redis'      },
+  mongo:      { bg: 'rgba(0,237,100,.07)',   border: 'rgba(0,237,100,.25)',   text: '#6ee7b7', icon: '◈',  label: 'MongoDB'    },
+  jwt:        { bg: 'rgba(234,179,8,.09)',   border: 'rgba(234,179,8,.25)',   text: '#fde047', icon: '🔑', label: 'JWT'        },
+  graphql:    { bg: 'rgba(225,0,152,.09)',   border: 'rgba(225,0,152,.28)',   text: '#f472b6', icon: '◉',  label: 'GraphQL'    },
 }
 
-function getTechStyle(t: string) {
-  return TECH_COLOR[t.toLowerCase()] ?? { bg: '#ffffff0a', text: '#64748b', icon: '◈' }
+function getTechStyle(t: string): TechStyle {
+  return TECH_COLOR[t.toLowerCase()] ?? { bg: 'rgba(255,255,255,.04)', border: 'rgba(255,255,255,.09)', text: '#64748b', icon: '◈' }
 }
 
 // ─── Custom resizable node ─────────────────────────────────────────────────
@@ -123,18 +130,36 @@ function roleSubtitle(n: GraphNode): string {
   return hasDocker ? `${col.label} · Docker` : col.label
 }
 
+function TechPill({ name }: { name: string }) {
+  const ts = getTechStyle(name)
+  const isCode = name === 'typescript' || name === 'javascript'
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 8px', borderRadius: 5,
+      fontSize: 10.5, fontWeight: 500, lineHeight: 1,
+      background: ts.bg, border: `1px solid ${ts.border}`, color: ts.text,
+    }}>
+      {isCode
+        ? <span style={{ fontSize: 8, fontWeight: 800, fontFamily: 'monospace', letterSpacing: '-0.5px' }}>{ts.icon}</span>
+        : <span style={{ fontSize: 11 }}>{ts.icon}</span>
+      }
+      {ts.label ?? (name.charAt(0).toUpperCase() + name.slice(1))}
+    </span>
+  )
+}
+
 function ServiceNode({ data, selected }: NodeProps) {
   const d       = data as { graphNode: GraphNode; onSelect: (n: GraphNode) => void; isRunning: boolean }
   const n       = d.graphNode
   const col     = ROLE_COLOR[n.role]
   const running = d.isRunning
-  const dotColor = running ? '#22c55e' : col.border
 
   return (
     <>
       <NodeResizer
         isVisible={selected}
-        minWidth={180} minHeight={80}
+        minWidth={200} minHeight={90}
         handleStyle={{ width: 7, height: 7, background: col.border, border: 'none', borderRadius: 2 }}
         lineStyle={{ borderColor: col.border, borderWidth: 1 }}
       />
@@ -150,57 +175,43 @@ function ServiceNode({ data, selected }: NodeProps) {
 
       <div
         onClick={() => d.onSelect(n)}
-        style={{ padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
+        style={{ padding: '18px 20px 16px', cursor: 'pointer', userSelect: 'none' }}
       >
-        {/* Name row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+        {/* Card head: dot + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{
-            width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
-            background: dotColor,
-            boxShadow: running ? `0 0 7px ${dotColor}` : 'none',
+            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+            background: col.border,
+            boxShadow: `0 0 5px ${col.border}`,
+            animation: running ? 'cdotPulse 2s ease-in-out infinite' : 'none',
           }} />
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9', letterSpacing: '-0.01em' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.1px', color: '#e2e8f0' }}>
             {n.label}
           </span>
         </div>
 
         {/* Subtitle */}
-        <div style={{ fontSize: 11, color: '#475569', marginBottom: 12, paddingLeft: 17 }}>
+        <div style={{ fontSize: 10.5, color: '#334155', margin: '2px 0 11px 15px' }}>
           {roleSubtitle(n)}
         </div>
 
-        {/* Port(s) */}
+        {/* Port badge */}
         {n.port && (
-          <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 11 }}>
             <span style={{
-              fontSize: 11, fontFamily: 'monospace', fontWeight: 700,
-              padding: '3px 9px', borderRadius: 6,
-              background: `${col.border}20`,
-              border: `1px solid ${col.border}50`,
-              color: col.text,
-              letterSpacing: '0.02em',
+              fontFamily: "'SF Mono','Fira Code',monospace",
+              fontSize: 10.5, fontWeight: 600,
+              padding: '2px 7px', borderRadius: 5,
+              background: running ? 'rgba(16,185,129,.07)' : 'rgba(255,255,255,.04)',
+              border:     `1px solid ${running ? 'rgba(16,185,129,.30)' : 'rgba(255,255,255,.07)'}`,
+              color:      running ? '#34d399' : '#64748b',
             }}>:{n.port}</span>
           </div>
         )}
 
-        {/* Tech badges */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {n.tech.filter(t => t !== 'node').map(t => {
-            const ts = getTechStyle(t)
-            return (
-              <span key={t} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, padding: '3px 9px', borderRadius: 6,
-                background: ts.bg,
-                border: `1px solid ${ts.text}30`,
-                color: ts.text,
-                fontWeight: 500,
-              }}>
-                <span style={{ fontSize: 10 }}>{ts.icon}</span>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </span>
-            )
-          })}
+        {/* Tech pills */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          {n.tech.filter(t => t !== 'node').map(t => <TechPill key={t} name={t} />)}
         </div>
       </div>
     </>
@@ -250,6 +261,7 @@ function buildLayout(
     const startY = (totalH - colH) / 2  // vertically center shorter columns
 
     nodes.forEach((n, ni) => {
+      const rc = ROLE_COLOR[n.role]
       flowNodes.push({
         id:   n.id,
         type: 'service',
@@ -258,10 +270,11 @@ function buildLayout(
         style: {
           width:  NODE_W,
           height: NODE_H,
-          background: ROLE_COLOR[n.role].bg,
-          border: `1px solid ${ROLE_COLOR[n.role].border}`,
-          borderRadius: 8,
-          boxShadow: `0 0 10px ${ROLE_COLOR[n.role].glow}`,
+          background: rc.bg,
+          border: `1.5px solid ${rc.border}`,
+          borderRadius: 14,
+          boxShadow: `0 0 28px ${rc.glow}, inset 0 0 30px ${rc.glowInner}`,
+          transition: 'transform 0.18s ease, box-shadow 0.18s ease',
         },
       })
     })
@@ -301,26 +314,43 @@ function EnergyEdge({ id, source, target, sourceX, sourceY, targetX, targetY, so
   const statuses = useStore(s => s.statuses)
   const live     = isProjectRunning(source, statuses) && isProjectRunning(target, statuses)
   const color    = edgeColor(label)
-  const dur      = 2
+  const dur      = 1.6
+  const markerId = `arr-${id}`
 
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
 
   return (
     <>
-      {/* Base dim path — always visible */}
-      <BaseEdge id={id} path={edgePath} style={{ stroke: live ? `${color}30` : '#1e2d4560', strokeWidth: 1 }} />
+      {/* Arrow marker */}
+      <defs>
+        <marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L8,3.5 z" fill={live ? color : '#334155'} />
+        </marker>
+      </defs>
 
-      {/* Animated dash — only when live */}
+      {/* Base dim path */}
+      <BaseEdge id={id} path={edgePath} style={{
+        stroke: live ? `${color}35` : '#1e2d4540',
+        strokeWidth: 1.5,
+        markerEnd: `url(#${markerId})`,
+      }} />
+
+      {/* Animated dashes when live */}
       {live && (
-        <path d={edgePath} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.5}
-          strokeDasharray="5 8" style={{ animation: `dashFlow ${dur}s linear infinite` }} />
+        <path
+          d={edgePath} fill="none"
+          stroke={color} strokeWidth={1.5} strokeOpacity={0.55}
+          strokeDasharray="6 5"
+          style={{ animation: `dashFlow ${dur}s linear infinite` }}
+          markerEnd={`url(#${markerId})`}
+        />
       )}
 
-      {/* Particles — only when live */}
+      {/* Particles when live */}
       {live && (
         <g>
           {PARTICLES.map((offset, i) => (
-            <circle key={i} r={3} fill={color} style={{ filter: `drop-shadow(0 0 4px ${color})` }}>
+            <circle key={i} r={2.5} fill={color} style={{ filter: `drop-shadow(0 0 4px ${color})` }}>
               <animateMotion dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" path={edgePath} />
               <animate attributeName="opacity" values="0;1;1;0" dur={`${dur}s`} begin={`${-offset * dur}s`} repeatCount="indefinite" />
             </circle>
@@ -328,13 +358,15 @@ function EnergyEdge({ id, source, target, sourceX, sourceY, targetX, targetY, so
         </g>
       )}
 
+      {/* Edge label */}
       <EdgeLabelRenderer>
         <div style={{
           position: 'absolute',
           transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`,
-          fontSize: 9, color: live ? color : '#334155',
-          background: '#090e1a', padding: '1px 5px', borderRadius: 3,
-          border: `1px solid ${live ? color + '30' : '#1e2d45'}`,
+          fontSize: 10, fontFamily: "'SF Mono','Fira Code',monospace",
+          color: live ? color : '#1e2d45',
+          background: '#07070f', padding: '1px 6px', borderRadius: 4,
+          border: `1px solid ${live ? color + '30' : 'rgba(255,255,255,.07)'}`,
           pointerEvents: 'none', whiteSpace: 'nowrap',
         }} className="nodrag nopan">
           {label}
@@ -390,7 +422,7 @@ function DetailPanel({ node, onClose }: { node: GraphNode; onClose: () => void }
   return (
     <div style={{
       width: 280, flexShrink: 0,
-      background: '#090e1a', borderLeft: `1px solid ${col.border}30`,
+      background: '#0c0c18', borderLeft: `1px solid ${col.border}30`,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       animation: 'slideIn 0.15s ease-out',
     }}>
@@ -509,12 +541,15 @@ function Btn({ bg, color, onClick, disabled, children }: { bg: string; color: st
 // ─── CSS ───────────────────────────────────────────────────────────────────
 
 const CSS = `
-@keyframes dashFlow  { to { stroke-dashoffset: -26; } }
-@keyframes slideIn   { from { transform: translateX(16px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+@keyframes dashFlow   { to { stroke-dashoffset: -22; } }
+@keyframes slideIn    { from { transform: translateX(16px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+@keyframes cdotPulse  { 0%,100%{opacity:1} 50%{opacity:.35} }
 .react-flow__node-service { overflow: visible !important; }
+.react-flow__node-service:hover { transform: translateY(-3px) !important; }
 .react-flow__handle { opacity: 0; transition: opacity 0.15s; }
 .react-flow__node:hover .react-flow__handle { opacity: 1; }
 .react-flow__node.selected .react-flow__handle { opacity: 1; }
+.react-flow__background { background: #07070f !important; }
 `
 
 // ─── Per-group canvas ──────────────────────────────────────────────────────
@@ -546,8 +581,8 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
       style: {
         ...n.style,
         boxShadow: running
-          ? `0 0 14px ${ROLE_COLOR[role].glow}, 0 0 4px ${ROLE_COLOR[role].border}60`
-          : '0 0 4px #00000040',
+          ? `0 0 32px ${ROLE_COLOR[role as NodeRole].glow}, inset 0 0 30px ${ROLE_COLOR[role as NodeRole].glowInner}, 0 0 6px ${ROLE_COLOR[role as NodeRole].border}50`
+          : `0 0 28px ${ROLE_COLOR[role as NodeRole].glow}, inset 0 0 30px ${ROLE_COLOR[role as NodeRole].glowInner}`,
       },
     }
   })
@@ -566,8 +601,8 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
         style: {
           ...n.style,
           boxShadow: running
-            ? `0 0 14px ${ROLE_COLOR[role].glow}, 0 0 4px ${ROLE_COLOR[role].border}60`
-            : '0 0 4px #00000040',
+            ? `0 0 32px ${ROLE_COLOR[role as NodeRole].glow}, inset 0 0 30px ${ROLE_COLOR[role as NodeRole].glowInner}, 0 0 6px ${ROLE_COLOR[role as NodeRole].border}50`
+            : `0 0 28px ${ROLE_COLOR[role as NodeRole].glow}, inset 0 0 30px ${ROLE_COLOR[role as NodeRole].glowInner}`,
         },
       }
     }))
@@ -601,12 +636,12 @@ function GroupCanvas({ groupId, allNodes, allEdges }: { groupId: string; allNode
           colorMode="dark"
           defaultEdgeOptions={{ type: 'energy' }}
         >
-          <Background color="#0f1a2a" gap={32} size={1} />
-          <Controls style={{ background: '#090e1acc', border: '1px solid #1e2d45', borderRadius: 6 }} />
+          <Background color="#0f0f1a" gap={32} size={1} />
+          <Controls style={{ background: 'rgba(12,12,24,.9)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 8 }} />
           <MiniMap
-            style={{ background: '#090e1a', border: '1px solid #1e2d45', borderRadius: 6 }}
+            style={{ background: '#0c0c18', border: '1px solid rgba(255,255,255,.06)', borderRadius: 8 }}
             nodeColor={(n) => ROLE_COLOR[(n.data as { graphNode?: GraphNode }).graphNode?.role ?? 'unknown'].border}
-            maskColor="#090e1a88"
+            maskColor="rgba(7,7,15,.85)"
           />
         </ReactFlow>
       </div>
@@ -671,11 +706,11 @@ export default function ProjectMap({ focusGroupId }: { focusGroupId?: string | n
     : allGroups
 
   return (
-    <div style={{ height: '100%', width: '100%', background: '#090e1a', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', width: '100%', background: '#07070f', display: 'flex', flexDirection: 'column' }}>
       <style>{CSS}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: '1px solid #1e2d45', flexShrink: 0, background: '#090e1a' }}>
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,.05)', flexShrink: 0, background: 'rgba(255,255,255,.01)' }}>
         {/* Legend + title */}
         <div style={{ padding: '8px 16px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: '#475569', letterSpacing: '0.05em' }}>MAP</span>

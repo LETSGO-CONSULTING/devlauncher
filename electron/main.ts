@@ -1381,10 +1381,10 @@ const DB_ENV_PATTERNS = [
   { pattern: /^MYSQL_HOST$/i,                                               label: 'MySQL',      role: 'database' as NodeRole },
   { pattern: /^MONGO(DB)?_HOST$/i,                                          label: 'MongoDB',    role: 'database' as NodeRole },
   { pattern: /^REDIS_HOST$/i,                                               label: 'Redis',      role: 'cache'    as NodeRole },
-  // Storage
+  // Storage — MINIO_* vars → label 'MinIO' so they link to the docker-compose node
   { pattern: /MINIO_(ENDPOINT|HOST|URL)/i,                                  label: 'MinIO',      role: 'cache'    as NodeRole },
+  // Real AWS S3 only (not MinIO)
   { pattern: /^(AWS_S3_ENDPOINT|S3_ENDPOINT|STORAGE_URL)/i,                 label: 'S3 Storage', role: 'cache'    as NodeRole },
-  { pattern: /^AWS_BUCKET|S3_BUCKET|MINIO_BUCKET/i,                        label: 'S3 Storage', role: 'cache'    as NodeRole },
 ]
 
 const API_ENV_PATTERNS = [

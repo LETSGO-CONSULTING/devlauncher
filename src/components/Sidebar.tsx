@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ProjectGroup, Framework } from '../types'
 import { useStore } from '../store'
 import { TechIcon } from './TechIcon'
+import logoImg from '../assets/logo.png'
 
 interface Props {
   groups: ProjectGroup[]
@@ -74,11 +75,14 @@ export function Sidebar({ groups, onAddProject, activeTab, onTabChange, onSelect
 
   return (
     <aside className="sidebar">
+      {/* Traffic lights drag zone */}
+      <div className="sidebar-traffic-strip" onDoubleClick={() => window.electronAPI.windowMaximize()} />
+
       {/* Logo */}
-      <div className="sidebar-logo" onDoubleClick={() => window.electronAPI.windowMaximize()}>
-        <div className="logo-icon">⚡</div>
+      <div className="sidebar-logo">
+        <img src={logoImg} className="logo-icon-img" alt="Runtime Studio" />
         <div className="logo-text">
-          <div className="logo-name">DevLauncher</div>
+          <div className="logo-name">Runtime Studio</div>
           <div className="logo-version">V 1.0.0-BETA</div>
         </div>
       </div>

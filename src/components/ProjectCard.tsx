@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Project, ProcessStatus, ProjectType, Framework } from '../types'
 import { useStore } from '../store'
 
@@ -165,7 +165,6 @@ function useDetectedUrl(processKey: string, isRunning: boolean, fallbackUrl: str
 
   useEffect(() => {
     if (!isRunning) { setUrl(null); return }
-    // Scan all existing logs
     for (const entry of logs) {
       const found = extractUrl(entry.data)
       if (found) { setUrl(found); return }
@@ -173,6 +172,44 @@ function useDetectedUrl(processKey: string, isRunning: boolean, fallbackUrl: str
   }, [isRunning, logs.length])
 
   return url ?? (isRunning ? fallbackUrl : null)
+}
+
+// ─── Hook: git branch info ──────────────────────────────────────────────────
+
+function useGitInfo(projectPath: string) {
+  const [branch, setBranch]   = useState<string | null>(null)
+  const [dirty, setDirty]     = useState(false)
+
+  useEffect(() => {
+    window.electronAPI.gitInfo(projectPath).then(res => {
+      setBranch(res.branch)
+      setDirty(res.dirty)
+    })
+  }, [projectPath])
+
+  return { branch, dirty }
+}
+
+// ─── Hook: uptime display ──────────────────────────────────────────────────
+
+function useUptime(processKey: string, isRunning: boolean) {
+  const startedAt = useStore(s => s.processStartedAt[processKey])
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!isRunning || !startedAt) { setElapsed(0); return }
+    setElapsed(Date.now() - startedAt)
+    const id = setInterval(() => setElapsed(Date.now() - startedAt), 5000)
+    return () => clearInterval(id)
+  }, [isRunning, startedAt])
+
+  if (!isRunning || elapsed === 0) return null
+  const s = Math.floor(elapsed / 1000)
+  const m = Math.floor(s / 60)
+  const h = Math.floor(m / 60)
+  if (h > 0)  return `${h}h ${m % 60}m`
+  if (m > 0)  return `${m}m`
+  return `${s}s`
 }
 
 // ─── Open-in-browser button ─────────────────────────────────────────────────
@@ -199,29 +236,49 @@ function BrowserBtn({ url }: { url: string }) {
   )
 }
 
+const PM_LABELS: Record<string, string> = { pnpm: 'pnpm', yarn: 'yarn', bun: 'bun', npm: 'npm' }
+const PM_COLORS: Record<string, string> = { pnpm: '#f69220', yarn: '#2c8ebb', bun: '#fbf0df', npm: '#cc3534' }
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 export function ProjectCard({ project }: Props) {
-  const { statuses, setStatus, appendLog, openLog, setActiveLog, openLogs, activeLog, runtimeVersions } = useStore()
-  const type      = project.projectType ?? 'npm'
-  const meta      = TYPE_META[type]
-  const scripts   = sortScripts(project.scripts, type)
+  const { statuses, setStatus, appendLog, openLog, setActiveLog, openLogs, activeLog, runtimeVersions, autoRestart, setAutoRestart } = useStore()
+  const type       = project.projectType ?? 'npm'
+  const meta       = TYPE_META[type]
+  const scripts    = sortScripts(project.scripts, type)
   const frameworks = project.frameworks ?? []
   const isFrontend = type === 'npm' && isFrontendProject(frameworks)
+  const pm         = project.packageManager ?? 'npm'
+
+  const [showEnv, setShowEnv]     = useState(false)
+  const [showHooks, setShowHooks] = useState(false)
+  const [portWarn, setPortWarn]   = useState<string | null>(null)
+  const { branch, dirty } = useGitInfo(project.path)
 
   const getKey    = (s: string) => `${project.id}:${s}`
   const getStatus = (s: string): ProcessStatus => statuses[getKey(s)] ?? 'stopped'
   const rv        = runtimeVersions[project.id]
 
-  const start = async (scriptKey: string) => {
+  const start = useCallback(async (scriptKey: string) => {
     const key     = getKey(scriptKey)
     const command = project.scripts[scriptKey] ?? `npm run ${scriptKey}`
+
+    // Pre-check port for dev server scripts
+    if (isFrontend && isDevServerScript(scriptKey)) {
+      const port = getDefaultPort(frameworks)
+      const { inUse } = await window.electronAPI.checkPort(port)
+      if (inUse) {
+        setPortWarn(`Port ${port} is already in use`)
+        setTimeout(() => setPortWarn(null), 5000)
+      }
+    }
+
     setStatus(key, 'running')
     appendLog(key, { type: 'system', data: `▸ ${command}`, timestamp: Date.now() })
-    const res = await window.electronAPI.startProcess(project.id, project.path, scriptKey, command, rv?.node, rv?.java)
+    const preHook = project.hooks?.[scriptKey]?.pre
+    const res = await window.electronAPI.startProcess(project.id, project.path, scriptKey, command, rv?.node, rv?.java, project.name, preHook)
     if (res.error) {
       if (res.error === 'Already running') {
-        // Process is still alive — keep status as running, just open the console
         setStatus(key, 'running')
       } else {
         setStatus(key, 'error')
@@ -229,28 +286,37 @@ export function ProjectCard({ project }: Props) {
       }
     }
     openLog(key)
-  }
+  }, [project, rv, frameworks, isFrontend])
 
-  const stop = async (scriptKey: string) => {
+  const stop = useCallback(async (scriptKey: string) => {
     const key = getKey(scriptKey)
     await window.electronAPI.stopProcess(project.id, scriptKey)
     setStatus(key, 'stopped')
     appendLog(key, { type: 'system', data: '■ Process stopped', timestamp: Date.now() })
-  }
+  }, [project.id])
 
-  const restart = async (scriptKey: string) => {
+  const restart = useCallback(async (scriptKey: string) => {
     const key     = getKey(scriptKey)
     const command = project.scripts[scriptKey] ?? `npm run ${scriptKey}`
     appendLog(key, { type: 'system', data: '↺ Restarting...', timestamp: Date.now() })
     setStatus(key, 'running')
-    await window.electronAPI.restartProcess(project.id, project.path, scriptKey, command, rv?.node, rv?.java)
+    await window.electronAPI.restartProcess(project.id, project.path, scriptKey, command, rv?.node, rv?.java, project.name)
     openLog(key)
+  }, [project, rv])
+
+  const toggleAutoRestart = async (scriptKey: string) => {
+    const key = getKey(scriptKey)
+    const enabled = !autoRestart[key]
+    setAutoRestart(key, enabled)
+    await window.electronAPI.setAutoRestart(project.id, scriptKey, enabled)
   }
 
   if (scripts.length === 0) {
     return <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: 12 }}>No scripts found</div>
   }
 
+  const primaryFw   = frameworks[0]
+  const prefixColor = primaryFw ? FRAMEWORK_COLOR[primaryFw] : meta.prefixColor
   const defaultPort = getDefaultPort(frameworks)
   const isJava      = type === 'maven' || type === 'gradle'
   const monorepo    = isMonorepoLike(scripts)
@@ -258,29 +324,104 @@ export function ProjectCard({ project }: Props) {
 
   return (
     <>
+      {/* Tech badges + git branch + PM row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 20px 4px', flexWrap: 'wrap' }}>
+        {frameworks.length > 0
+          ? frameworks.map(fw => (
+              <span key={fw} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <TechIcon framework={fw} size={14} />
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: FRAMEWORK_COLOR[fw], opacity: 0.85 }}>
+                  {FRAMEWORK_LABEL[fw]}
+                </span>
+              </span>
+            ))
+          : (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0.6 }}>
+              <span style={{ fontSize: 12 }}>{meta.icon}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: meta.prefixColor }}>
+                {meta.label}
+              </span>
+            </span>
+          )
+        }
+
+        {/* Package manager badge */}
+        {type === 'npm' && pm !== 'npm' && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: PM_COLORS[pm] ?? '#888', opacity: 0.8, marginLeft: 2 }}>
+            {PM_LABELS[pm]}
+          </span>
+        )}
+
+        {/* Git branch badge */}
+        {branch && (
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 3,
+            fontSize: 10, color: dirty ? '#f59e0b' : '#6b7280',
+            marginLeft: 'auto',
+          }}>
+            <span style={{ fontSize: 11 }}>⎇</span>
+            <span>{branch}</span>
+            {dirty && <span title="Uncommitted changes">●</span>}
+          </span>
+        )}
+
+        {/* ENV button */}
+        <button
+          onClick={() => setShowEnv(v => !v)}
+          style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+            background: showEnv ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.07)',
+            border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8',
+            cursor: 'pointer', letterSpacing: '0.5px',
+          }}
+          title="Edit .env files"
+        >.ENV</button>
+
+        {/* Hooks button */}
+        <button
+          onClick={() => setShowHooks(v => !v)}
+          style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+            background: showHooks ? 'rgba(34,197,94,0.2)' : 'rgba(34,197,94,0.07)',
+            border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80',
+            cursor: 'pointer', letterSpacing: '0.5px',
+          }}
+          title="Configure pre/post hooks"
+        >HOOKS</button>
+      </div>
+
+      {/* Port warning */}
+      {portWarn && (
+        <div style={{ margin: '0 20px 4px', padding: '4px 8px', borderRadius: 4, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: 11 }}>
+          ⚠ {portWarn}
+        </div>
+      )}
+
+      {/* ENV editor inline panel */}
+      {showEnv && <EnvPanel projectPath={project.path} />}
+
+      {/* Hooks editor inline panel */}
+      {showHooks && <HooksPanel project={project} scripts={scripts} />}
+
+      {/* Monorepo-grouped script rows */}
       {grouped.map(({ group, scripts: groupKeys }) => {
-        const meta = GROUP_META[group]
+        const grpMeta = GROUP_META[group]
         return (
           <div key={group}>
-            {/* Group header — only for non-general when monorepo detected */}
             {monorepo && group !== 'general' && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '6px 20px 4px',
                 marginTop: group === grouped[0].group ? 0 : 2,
-                background: meta.bg,
-                borderTop: `1px solid ${meta.color}22`,
-                borderBottom: `1px solid ${meta.color}22`,
+                background: grpMeta.bg,
+                borderTop: `1px solid ${grpMeta.color}22`,
+                borderBottom: `1px solid ${grpMeta.color}22`,
               }}>
-                <span style={{
-                  fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
-                  color: meta.color,
-                }}>{meta.label}</span>
-                <span style={{ flex: 1, height: 1, background: `${meta.color}20` }} />
-                <span style={{ fontSize: 9, color: `${meta.color}80` }}>{groupKeys.length} scripts</span>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: grpMeta.color }}>{grpMeta.label}</span>
+                <span style={{ flex: 1, height: 1, background: `${grpMeta.color}20` }} />
+                <span style={{ fontSize: 9, color: `${grpMeta.color}80` }}>{groupKeys.length} scripts</span>
               </div>
             )}
-
             {groupKeys.map((scriptKey) => {
               const status     = getStatus(scriptKey)
               const key        = getKey(scriptKey)
@@ -291,6 +432,7 @@ export function ProjectCard({ project }: Props) {
               const command    = project.scripts[scriptKey] ?? `npm run ${scriptKey}`
               const { prefix, cmd } = parseDisplay(scriptKey, command, type)
               const showBrowser = isFrontend && isDevServerScript(scriptKey) && isRunning
+              const arEnabled   = autoRestart[key] ?? false
 
               return (
                 <ScriptRow
@@ -299,16 +441,19 @@ export function ProjectCard({ project }: Props) {
                   processKey={key}
                   prefix={prefix}
                   cmd={cmd}
+                  prefixColor={prefixColor}
                   status={pillClass}
                   isRunning={isRunning}
                   isSelected={isSelected}
                   showBrowser={showBrowser}
                   defaultPort={defaultPort}
                   restartOnRun={isJava}
+                  autoRestart={arEnabled}
                   onLogs={() => activeLog === key ? setActiveLog(null) : openLog(key)}
                   onStart={() => isJava && isRunning ? restart(scriptKey) : start(scriptKey)}
                   onStop={() => stop(scriptKey)}
                   onRestart={() => restart(scriptKey)}
+                  onToggleAutoRestart={() => toggleAutoRestart(scriptKey)}
                 />
               )
             })}
@@ -319,17 +464,19 @@ export function ProjectCard({ project }: Props) {
   )
 }
 
-// ─── Script row with browser detection ─────────────────────────────────────
+// ─── Script row with browser detection, uptime, auto-restart ─────────────────
 
-function ScriptRow({ scriptKey, processKey, prefix, cmd, status, isRunning, isSelected,
-  showBrowser, defaultPort, restartOnRun, onLogs, onStart, onStop, onRestart }: {
-  scriptKey: string; processKey: string; prefix: string; cmd: string
+function ScriptRow({ scriptKey, processKey, prefix, cmd, prefixColor, status, isRunning, isSelected,
+  showBrowser, defaultPort, restartOnRun, autoRestart, onLogs, onStart, onStop, onRestart, onToggleAutoRestart }: {
+  scriptKey: string; processKey: string; prefix: string; cmd: string; prefixColor: string
   status: string; isRunning: boolean; isSelected: boolean
-  showBrowser: boolean; defaultPort: number; restartOnRun?: boolean
+  showBrowser: boolean; defaultPort: number; restartOnRun?: boolean; autoRestart?: boolean
   onLogs: () => void; onStart: () => void; onStop: () => void; onRestart: () => void
+  onToggleAutoRestart: () => void
 }) {
-  const fallbackUrl  = `http://localhost:${defaultPort}`
-  const detectedUrl  = useDetectedUrl(processKey, isRunning, fallbackUrl)
+  const fallbackUrl = `http://localhost:${defaultPort}`
+  const detectedUrl = useDetectedUrl(processKey, isRunning, fallbackUrl)
+  const uptime      = useUptime(processKey, isRunning)
 
   return (
     <div className={`script-row ${isSelected ? 'selected' : ''}`}>
@@ -342,6 +489,12 @@ function ScriptRow({ scriptKey, processKey, prefix, cmd, status, isRunning, isSe
         {isRunning ? 'active' : status === 'error' ? 'error' : 'idle'}
       </span>
 
+      {uptime && (
+        <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 2 }} title="Uptime">
+          {uptime}
+        </span>
+      )}
+
       <button
         className={`btn-logs ${isSelected ? 'active' : ''}`}
         onClick={onLogs}
@@ -349,10 +502,20 @@ function ScriptRow({ scriptKey, processKey, prefix, cmd, status, isRunning, isSe
         LOGS
       </button>
 
-      {/* Browser open button — only for running frontend dev-server scripts */}
-      {showBrowser && detectedUrl && (
-        <BrowserBtn url={detectedUrl} />
-      )}
+      {showBrowser && detectedUrl && <BrowserBtn url={detectedUrl} />}
+
+      {/* Auto-restart toggle */}
+      <button
+        title={autoRestart ? 'Auto-restart on crash: ON' : 'Auto-restart on crash: OFF'}
+        onClick={onToggleAutoRestart}
+        style={{
+          fontSize: 10, padding: '2px 5px', borderRadius: 4,
+          background: autoRestart ? 'rgba(34,197,94,0.15)' : 'transparent',
+          border: `1px solid ${autoRestart ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
+          color: autoRestart ? '#4ade80' : '#6b7280',
+          cursor: 'pointer',
+        }}
+      >↺</button>
 
       {isRunning ? (
         <>
@@ -363,6 +526,107 @@ function ScriptRow({ scriptKey, processKey, prefix, cmd, status, isRunning, isSe
       ) : (
         <button className="btn-run" onClick={onStart}>RUN</button>
       )}
+    </div>
+  )
+}
+
+// ─── Inline .env panel ─────────────────────────────────────────────────────
+
+function EnvPanel({ projectPath }: { projectPath: string }) {
+  const [files, setFiles]       = useState<string[]>([])
+  const [active, setActive]     = useState('.env')
+  const [content, setContent]   = useState('')
+  const [status, setStatus]     = useState<'idle' | 'saved' | 'error'>('idle')
+
+  useEffect(() => {
+    window.electronAPI.envList(projectPath).then(r => {
+      const list = r.files.length > 0 ? r.files : ['.env']
+      setFiles(list)
+      setActive(list[0])
+    })
+  }, [projectPath])
+
+  useEffect(() => {
+    if (!active) return
+    window.electronAPI.envRead(projectPath, active).then(r => setContent(r.content ?? ''))
+  }, [projectPath, active])
+
+  const save = async () => {
+    const res = await window.electronAPI.envWrite(projectPath, active, content)
+    setStatus(res.success ? 'saved' : 'error')
+    setTimeout(() => setStatus('idle'), 2000)
+  }
+
+  return (
+    <div style={{ margin: '0 20px 8px', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'rgba(99,102,241,0.08)', borderBottom: '1px solid rgba(99,102,241,0.15)' }}>
+        {files.map(f => (
+          <button key={f} onClick={() => setActive(f)} style={{
+            fontSize: 10, padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+            background: active === f ? 'rgba(99,102,241,0.3)' : 'transparent',
+            border: '1px solid ' + (active === f ? 'rgba(99,102,241,0.5)' : 'transparent'),
+            color: active === f ? '#a5b4fc' : '#6b7280',
+          }}>{f}</button>
+        ))}
+        {!files.includes('.env.local') && (
+          <button onClick={() => { setFiles(f => [...f, '.env.local']); setActive('.env.local'); setContent('') }} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 3, cursor: 'pointer', background: 'transparent', border: '1px dashed rgba(99,102,241,0.3)', color: '#6b7280' }}>+ new</button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: status === 'saved' ? '#4ade80' : status === 'error' ? '#f87171' : 'transparent' }}>
+          {status === 'saved' ? '✓ saved' : status === 'error' ? '✗ error' : '·'}
+        </span>
+        <button onClick={save} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3, background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', cursor: 'pointer' }}>Save</button>
+      </div>
+      <textarea
+        value={content}
+        onChange={e => setContent(e.target.value)}
+        spellCheck={false}
+        style={{
+          width: '100%', minHeight: 120, maxHeight: 280, padding: '8px 10px',
+          background: '#0d1117', color: '#cdd9e5', fontSize: 11, fontFamily: 'monospace',
+          border: 'none', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+        }}
+        placeholder="KEY=value"
+      />
+    </div>
+  )
+}
+
+// ─── Inline hooks panel ────────────────────────────────────────────────────
+
+function HooksPanel({ project, scripts }: { project: Project; scripts: string[] }) {
+  const [hooks, setHooks] = useState<Record<string, { pre?: string }>>(project.hooks ?? {})
+  const [saved, setSaved] = useState(false)
+
+  const save = () => {
+    // Persist via save-groups — caller must handle; emit event
+    const updated = { ...project, hooks }
+    const event = new CustomEvent('project-hooks-updated', { detail: updated })
+    window.dispatchEvent(event)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div style={{ margin: '0 20px 8px', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 10px', background: 'rgba(34,197,94,0.06)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: '#4ade80', letterSpacing: '0.5px' }}>PRE-HOOKS</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: saved ? '#4ade80' : 'transparent' }}>✓ saved</span>
+        <button onClick={save} style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', borderRadius: 3, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', cursor: 'pointer' }}>Save</button>
+      </div>
+      <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {scripts.slice(0, 4).map(sk => (
+          <div key={sk} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: '#6b7280', minWidth: 80 }}>{sk}</span>
+            <input
+              type="text"
+              placeholder="command to run before…"
+              value={hooks[sk]?.pre ?? ''}
+              onChange={e => setHooks(h => ({ ...h, [sk]: { ...h[sk], pre: e.target.value } }))}
+              style={{ flex: 1, fontSize: 10, padding: '3px 6px', background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 3, color: '#cdd9e5', outline: 'none', fontFamily: 'monospace' }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

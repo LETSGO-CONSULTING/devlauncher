@@ -21,6 +21,10 @@ interface AppState {
   // current license tier
   tier: Tier
   licenseExpiresAt: string | null  // ISO string or null
+  // epoch ms when a process was last started
+  processStartedAt: Record<string, number>
+  // keys that should auto-restart on crash
+  autoRestart: Record<string, boolean>
 
   setGroups: (groups: ProjectGroup[]) => void
   addGroup: (group: ProjectGroup) => void
@@ -29,6 +33,8 @@ interface AppState {
   setStatus: (key: string, status: ProcessStatus) => void
   appendLog: (key: string, entry: LogEntry) => void
   clearLog: (key: string) => void
+  setStartedAt: (key: string, ts: number) => void
+  setAutoRestart: (key: string, enabled: boolean) => void
   openLog: (key: string) => void        // open or focus a console tab
   closeLog: (key: string) => void       // close a console tab
   setActiveLog: (key: string | null) => void  // switch active tab
@@ -51,6 +57,8 @@ export const useStore = create<AppState>((set) => ({
   logLabels: {},
   tier: 'free',
   licenseExpiresAt: null,
+  processStartedAt: {},
+  autoRestart: {},
 
   setGroups: (groups) => set({ groups }),
 
@@ -80,7 +88,16 @@ export const useStore = create<AppState>((set) => ({
     }),
 
   clearLog: (key) =>
-    set((s) => ({ logs: { ...s.logs, [key]: [] } })),
+    set((s) => ({
+      logs: { ...s.logs, [key]: [] },
+      logCounts: { ...s.logCounts, [key]: 0 },
+    })),
+
+  setStartedAt: (key, ts) =>
+    set((s) => ({ processStartedAt: { ...s.processStartedAt, [key]: ts } })),
+
+  setAutoRestart: (key, enabled) =>
+    set((s) => ({ autoRestart: { ...s.autoRestart, [key]: enabled } })),
 
   openLog: (key) =>
     set((s) => ({

@@ -248,16 +248,44 @@ function renderLine(raw: string): React.ReactNode {
 // ─── Context menu ─────────────────────────────────────────────────────────
 interface CtxMenu { x: number; y: number }
 
+type LevelFilter = 'all' | 'error' | 'warn' | 'info' | 'debug'
+
+function matchesLevel(line: string, filter: LevelFilter): boolean {
+  if (filter === 'all') return true
+  const u = line.toUpperCase()
+  if (filter === 'error') return /\b(ERROR|FATAL|EXCEPTION)\b/.test(u)
+  if (filter === 'warn')  return /\bWARN(ING)?\b/.test(u)
+  if (filter === 'info')  return /\bINFO\b/.test(u)
+  if (filter === 'debug') return /\b(DEBUG|TRACE|VERBOSE)\b/.test(u)
+  return true
+}
+
 // ─── Component ────────────────────────────────────────────────────────────
 export function LogViewer({ processKey, label, fullHeight, onClose }: Props) {
   const { logs, clearLog, statuses } = useStore()
-  const entries   = logs[processKey] ?? []
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const topRef    = useRef<HTMLDivElement>(null)
-  const [ctx, setCtx] = useState<CtxMenu | null>(null)
-  const [inputVal, setInputVal]   = useState('')
-  const [inputErr, setInputErr]   = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const allEntries = logs[processKey] ?? []
+  const bottomRef  = useRef<HTMLDivElement>(null)
+  const topRef     = useRef<HTMLDivElement>(null)
+  const [ctx, setCtx]           = useState<CtxMenu | null>(null)
+  const [inputVal, setInputVal] = useState('')
+  const [inputErr, setInputErr] = useState('')
+  const [searchQuery, setSearchQuery]   = useState('')
+  const [levelFilter, setLevelFilter]   = useState<LevelFilter>('all')
+  const [cmdHistory, setCmdHistory]     = useState<string[]>([])
+  const [historyIdx, setHistoryIdx]     = useState(-1)
+  const inputRef  = useRef<HTMLInputElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Apply search + level filter
+  const entries = allEntries.filter(entry => {
+    if (entry.type === 'system' || entry.type === 'stdin') return true
+    const lines = entry.data
+    if (searchQuery && !stripAnsi(lines).toLowerCase().includes(searchQuery.toLowerCase())) return false
+    if (levelFilter !== 'all' && !matchesLevel(stripAnsi(lines), levelFilter)) return false
+    return true
+  })
+
+  const isFiltered = searchQuery !== '' || levelFilter !== 'all'
 
   // Derive projectId + scriptKey from processKey
   const colonIdx  = processKey.indexOf(':')
@@ -269,7 +297,8 @@ export function LogViewer({ processKey, label, fullHeight, onClose }: Props) {
     const text = inputVal
     if (!text) return
     setInputVal('')
-    // Echo the input into the log
+    setCmdHistory(h => [text, ...h.slice(0, 49)])
+    setHistoryIdx(-1)
     const { appendLog } = useStore.getState()
     appendLog(processKey, { type: 'stdin', data: text, timestamp: Date.now() })
     const res = await window.electronAPI.sendInput(projectId, scriptKey, text + '\n')
@@ -280,8 +309,22 @@ export function LogViewer({ processKey, label, fullHeight, onClose }: Props) {
   }
 
   const onInputKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') sendStdin()
-    if (e.key === 'Escape') setInputVal('')
+    if (e.key === 'Enter') { sendStdin(); return }
+    if (e.key === 'Escape') { setInputVal(''); setHistoryIdx(-1); return }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const nextIdx = Math.min(historyIdx + 1, cmdHistory.length - 1)
+      setHistoryIdx(nextIdx)
+      if (cmdHistory[nextIdx] !== undefined) setInputVal(cmdHistory[nextIdx])
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const nextIdx = Math.max(historyIdx - 1, -1)
+      setHistoryIdx(nextIdx)
+      setInputVal(nextIdx === -1 ? '' : cmdHistory[nextIdx] ?? '')
+      return
+    }
   }
 
   useEffect(() => {
@@ -297,6 +340,19 @@ export function LogViewer({ processKey, label, fullHeight, onClose }: Props) {
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', onKey) }
   }, [ctx])
+
+  // Cmd+F / Ctrl+F focuses search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   label = label ?? processKey.toUpperCase().replace(':', ' / ')
 
@@ -346,6 +402,41 @@ export function LogViewer({ processKey, label, fullHeight, onClose }: Props) {
         <button className="btn-console-clear" onClick={downloadLogs} title="Download log as file">Download</button>
         <button className="btn-console-clear" onClick={() => clearLog(processKey)}>Clear</button>
         <button className="btn-console-close" onClick={onClose}>×</button>
+      </div>
+
+      {/* ── Search + level filter bar ───────────────────────── */}
+      <div className="log-filter-bar">
+        <div className="log-search-wrap">
+          <span className="log-search-icon">⌕</span>
+          <input
+            ref={searchRef}
+            className="log-search-input"
+            type="text"
+            placeholder="Search logs… (⌘F)"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            spellCheck={false}
+          />
+          {searchQuery && (
+            <button className="log-search-clear" onClick={() => setSearchQuery('')}>×</button>
+          )}
+        </div>
+        <div className="log-level-btns">
+          {(['all', 'error', 'warn', 'info', 'debug'] as LevelFilter[]).map(lvl => (
+            <button
+              key={lvl}
+              className={`log-level-btn log-level-btn--${lvl}${levelFilter === lvl ? ' active' : ''}`}
+              onClick={() => setLevelFilter(lvl)}
+            >
+              {lvl.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {isFiltered && (
+          <span className="log-filter-count">
+            {entries.filter(e => e.type !== 'system' && e.type !== 'stdin').length} / {allEntries.filter(e => e.type !== 'system' && e.type !== 'stdin').length}
+          </span>
+        )}
       </div>
 
       <div className="log-output" onContextMenu={handleContextMenu}>

@@ -2126,3 +2126,88 @@ button:active { transform: scale(0.97); }
   color: var(--cyan, #00d4ff);
   margin-left: auto;
 }
+
+/* ─── Log search + filter bar ────────────────────────────────────────────── */
+.log-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.log-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex: 1;
+  max-width: 260px;
+}
+
+.log-search-icon {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1;
+}
+
+.log-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 11px;
+  width: 100%;
+  font-family: inherit;
+}
+
+.log-search-input::placeholder { color: #4b5563; }
+
+.log-search-clear {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.log-search-clear:hover { color: #e2e8f0; }
+
+.log-level-btns {
+  display: flex;
+  gap: 3px;
+}
+
+.log-level-btn {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #6b7280;
+  letter-spacing: 0.4px;
+  transition: all 0.12s;
+}
+
+.log-level-btn:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.25); }
+.log-level-btn.active { color: #e2e8f0; background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); }
+.log-level-btn--error.active { color: #ff6b68; background: rgba(255,107,104,0.12); border-color: rgba(255,107,104,0.4); }
+.log-level-btn--warn.active  { color: #bbb529; background: rgba(187,181,41,0.12); border-color: rgba(187,181,41,0.4); }
+.log-level-btn--info.active  { color: #6a9153; background: rgba(106,145,83,0.12); border-color: rgba(106,145,83,0.4); }
+.log-level-btn--debug.active { color: #6897bb; background: rgba(104,151,187,0.12); border-color: rgba(104,151,187,0.4); }
+
+.log-filter-count {
+  font-size: 10px;
+  color: #6b7280;
+  margin-left: 4px;
+  white-space: nowrap;
+}

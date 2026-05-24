@@ -7,13 +7,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveGroups:  (groups: unknown) => ipcRenderer.invoke('save-groups', groups),
 
   // ── Process control ───────────────────────────────────────
-  startProcess: (projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string) =>
-    ipcRenderer.invoke('start-process', projectId, projectPath, scriptKey, command, nodeVersion, javaVersion),
+  startProcess: (
+    projectId: string, projectPath: string, scriptKey: string, command: string,
+    nodeVersion?: string, javaVersion?: string, projectName?: string, preHook?: string,
+  ) => ipcRenderer.invoke('start-process', projectId, projectPath, scriptKey, command, nodeVersion, javaVersion, projectName, preHook),
   stopProcess: (projectId: string, scriptKey: string) =>
     ipcRenderer.invoke('stop-process', projectId, scriptKey),
-  restartProcess: (projectId: string, projectPath: string, scriptKey: string, command: string, nodeVersion?: string, javaVersion?: string) =>
-    ipcRenderer.invoke('restart-process', projectId, projectPath, scriptKey, command, nodeVersion, javaVersion),
+  restartProcess: (
+    projectId: string, projectPath: string, scriptKey: string, command: string,
+    nodeVersion?: string, javaVersion?: string, projectName?: string,
+  ) => ipcRenderer.invoke('restart-process', projectId, projectPath, scriptKey, command, nodeVersion, javaVersion, projectName),
   getRunning: () => ipcRenderer.invoke('get-running'),
+  setAutoRestart: (projectId: string, scriptKey: string, enabled: boolean) =>
+    ipcRenderer.invoke('set-auto-restart', projectId, scriptKey, enabled),
 
   // ── Node.js versions (nvm) ────────────────────────────────
   nodeListVersions:    () => ipcRenderer.invoke('node-list-versions'),
@@ -66,14 +72,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Shell / system ────────────────────────────────────────
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   openInFinder: (folderPath: string) => ipcRenderer.invoke('open-in-finder', folderPath),
-  killPort: (port: number) => ipcRenderer.invoke('kill-port', port),
+  killPort:     (port: number) => ipcRenderer.invoke('kill-port', port),
+  checkPort:    (port: number) => ipcRenderer.invoke('check-port', port),
   getProcessPids: () => ipcRenderer.invoke('get-process-pids'),
   checkPorts: (ports: number[]) => ipcRenderer.invoke('check-ports', ports),
   sendInput: (projectId: string, scriptKey: string, text: string) =>
     ipcRenderer.invoke('send-input', projectId, scriptKey, text),
 
-  // ── Events — each subscription gets its own listener ref ──
-  // so cleanup only removes THAT subscription, not all others.
+  // ── Git ───────────────────────────────────────────────────
+  gitInfo: (projectPath: string) => ipcRenderer.invoke('git-info', projectPath),
+
+  // ── .env files ────────────────────────────────────────────
+  envList:  (projectPath: string)                              => ipcRenderer.invoke('env-list', projectPath),
+  envRead:  (projectPath: string, filename: string)            => ipcRenderer.invoke('env-read', projectPath, filename),
+  envWrite: (projectPath: string, filename: string, content: string) => ipcRenderer.invoke('env-write', projectPath, filename, content),
+
+  // ── Events ────────────────────────────────────────────────
   onProcessLog: (cb: (p: { key: string; data: string; type: 'stdout' | 'stderr' }) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, p: { key: string; data: string; type: 'stdout' | 'stderr' }) => cb(p)
     ipcRenderer.on('process-log', handler)
@@ -84,6 +98,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('process-exit', handler)
     return () => ipcRenderer.removeListener('process-exit', handler)
   },
+  onProcessStarted: (cb: (p: { key: string; pid: number | null; startedAt: number }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, p: { key: string; pid: number | null; startedAt: number }) => cb(p)
+    ipcRenderer.on('process-started', handler)
+    return () => ipcRenderer.removeListener('process-started', handler)
+  },
+  onProcessPortConflict: (cb: (p: { key: string }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, p: { key: string }) => cb(p)
+    ipcRenderer.on('process-port-conflict', handler)
+    return () => ipcRenderer.removeListener('process-port-conflict', handler)
+  },
   onNodeVersionsChanged: (cb: () => void) => {
     const handler = () => cb()
     ipcRenderer.on('node-versions-changed', handler)
@@ -93,10 +117,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => cb()
     ipcRenderer.on('java-versions-changed', handler)
     return () => ipcRenderer.removeListener('java-versions-changed', handler)
-  },
-  onProcessStarted: (cb: (p: { key: string; pid: number | null }) => void) => {
-    const handler = (_e: Electron.IpcRendererEvent, p: { key: string; pid: number | null }) => cb(p)
-    ipcRenderer.on('process-started', handler)
-    return () => ipcRenderer.removeListener('process-started', handler)
   },
 })
